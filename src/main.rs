@@ -122,6 +122,7 @@ fn make_rules_makiwexp() -> Vec<Rewrite<MakiWexp, ()>> {
     v.extend(vec![
         rewrite!("xor_conv"; "(XOR ?a ?b)" <=> "(AND (OR ?a ?b) (NOT (AND ?a ?b)))"),
         rewrite!("xor_conv2"; "(XOR ?a ?b)" <=> "(OR (AND (NOT ?a) ?b) (AND ?a (NOT ?b)))"),
+        rewrite!("xor_and_comm"; "(OR (AND ?a ?b) (AND ?c (XOR ?a ?b)))" <=> "(OR (AND ?a ?c) (AND ?b (XOR ?a ?c)))"),
         rewrite!("de_morgan"; "(NOT (AND ?a ?b))" <=> "(OR (NOT ?a) (NOT ?b))"),
         rewrite!("de_morgan2"; "(NOT (OR ?a ?b))" <=> "(AND (NOT ?a) (NOT ?b))"),
         rewrite!("dist_and_or"; "(AND ?a (OR ?b ?c))" <=> "(OR (AND ?a ?b) (AND ?a ?c))"),
@@ -241,17 +242,21 @@ fn test_full_add() {
     let full_add5 = "(CONCAT (XOR cin (XOR b a)) (OR (AND b a) (AND cin (XOR a b))))";
     let full_add6 = "(CONCAT (XOR (XOR cin a) b) (OR (AND a cin) (AND b (XOR a cin))))";
 
+    compare_makiwexp("(OR (AND a cin) (AND b (XOR a cin)))", "(AND (OR b (AND a cin)) (OR (AND a cin) (XOR a cin)))", true);
+    compare_makiwexp("(AND (OR b (AND a cin)) (OR (AND a cin) (XOR a cin)))", "(OR (AND (OR (AND a cin) b) (AND a cin)) (AND (OR (AND a cin) b) (XOR a cin)))", true);
+
     compare_makiwexp(full_add1, full_add4, true);
+    compare_makiwexp(full_add6, full_add1, true);
     compare_makiwexp(full_add1, full_add2, false); // false because rewrites are unidirectional - when equivalence classes for full_add1 gets saturated, they don't encompass full_add2
     compare_makiwexp(full_add2, full_add1, true); // when equivalence classes for full_add2 gets saturated, they encompass full_add1
     compare_makiwexp(full_add2, full_add3, true);
     compare_makiwexp(full_add5, full_add3, true);
-    compare_makiwexp(full_add5, full_add6, false); // bug, set equal to true when fixed
-    compare_makiwexp(full_add5, full_add6, false); // bug
+    compare_makiwexp(full_add5, full_add6, true);
+    compare_makiwexp(full_add6, full_add5, true);
 
     // TODO: figure out why the following fails
     compare_makiwexp("(OR (AND b a) (AND cin (XOR a b)))", "(OR (AND a cin) (AND b (XOR a cin)))", true);
-    compare_makiwexp(full_add6, full_add5, true);
+    // compare_makiwexp(full_add6, full_add5, true);
     
     println!("{}", simplify_makiwexp(full_add1));
     println!("{}", simplify_makiwexp(full_add2));
@@ -274,3 +279,4 @@ fn test_full_add_adv() {
     compare_makiwexp("(FULL_ADD a b c)", "(FULL_ADD b a c)", true);
     compare_makiwexp("(FULL_ADD a b c)", "(FULL_ADD a c b)", true);
 }
+
