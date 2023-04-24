@@ -30,6 +30,7 @@ define_language! {
     enum MakiWexp {
         "HALF_ADD" = HalfAdder([Id; 2]),
         "FULL_ADD" = FullAdder([Id; 3]),
+        "N_BIT_ADD" = NAdder(Box<[Id]>),
         "AND" = And([Id; 2]),
         "OR" = Or([Id; 2]),
         "NOT" = Not(Id),
@@ -44,8 +45,6 @@ define_language! {
         Symbol(Symbol),
     }
 }
-
-// (AND )
 
 // examples:
 // (SEQ (DEF (LHS tmp23) (AND a carry_in))
