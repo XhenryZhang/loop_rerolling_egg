@@ -241,6 +241,7 @@ fn test_full_add() {
     let full_add5 = "(CONCAT (XOR cin (XOR b a)) (OR (AND b a) (AND cin (XOR a b))))";
     let full_add6 = "(CONCAT (XOR (XOR cin a) b) (OR (AND a cin) (AND b (XOR a cin))))";
 
+    compare_makiwexp("(OR (OR (AND cin b) (AND a cin)) (AND b a)))", "(OR (OR (AND b a) (AND a cin)) (AND b cin)))", true);
     compare_makiwexp("(OR (AND a cin) (AND b (XOR a cin)))", "(AND (OR b (AND a cin)) (OR (AND a cin) (XOR a cin)))", true);
     compare_makiwexp("(AND (OR b (AND a cin)) (OR (AND a cin) (XOR a cin)))", "(OR (AND (OR (AND a cin) b) (AND a cin)) (AND (OR (AND a cin) b) (XOR a cin)))", true);
 
@@ -277,5 +278,22 @@ fn test_full_add() {
 fn test_full_add_adv() {
     compare_makiwexp("(FULL_ADD a b c)", "(FULL_ADD b a c)", true);
     compare_makiwexp("(FULL_ADD a b c)", "(FULL_ADD a c b)", true);
+    compare_makiwexp("(FULL_ADD c b a)", "(FULL_ADD a b c)", true);
+
+    // 2-bit ripple carry adder
+    let one_bit_add = "(CONCAT (XOR (XOR a0 b0) cin) (OR (OR (AND a0 b0) (AND a0 cin)) (AND b0 cin)))";
+    let one_bit_add2 = "(CONCAT (XOR (XOR a0 cin) b0) (OR (OR (AND a0 cin) (AND a0 b0)) (AND cin b0)))";
+    let one_bit_add3 = "(CONCAT (XOR (XOR b0 a0) cin) (OR (AND b0 a0) (AND cin (XOR b0 a0))))";
+    let two_bit_ripple = "(CONCAT (SELECT (CONCAT (XOR (XOR a0 b0) cin) (OR (OR (AND a0 b0) (AND a0 cin)) (AND b0 cin))) 0) (CONCAT (XOR (XOR a1 b1) (SELECT (CONCAT (XOR (XOR a0 b0) cin) (OR (OR (AND a0 b0) (AND a0 cin)) (AND b0 cin))) 1)) (OR (OR (AND a1 b1) (AND a1 (SELECT (CONCAT (XOR (XOR a0 b0) cin) (OR (OR (AND a0 b0) (AND a0 cin)) (AND b0 cin))) 1))) (AND b1 (SELECT (CONCAT (XOR (XOR a0 b0) cin) (OR (OR (AND a0 b0) (AND a0 cin)) (AND b0 cin))) 1)))))";
+    let two_bit_ripple_formatted = format!("(CONCAT (SELECT {} 0) (CONCAT (XOR (XOR a1 b1) (SELECT {} 1)) (OR (OR (AND a1 b1) (AND a1 (SELECT {} 1))) (AND b1 (SELECT {} 1)))))", one_bit_add, one_bit_add, one_bit_add, one_bit_add);
+    let two_bit_ripple_formatted2 = format!("(CONCAT (SELECT {} 0) (CONCAT (XOR (XOR a1 b1) (SELECT {} 1)) (OR (OR (AND a1 b1) (AND a1 (SELECT {} 1))) (AND b1 (SELECT {} 1)))))", one_bit_add, one_bit_add2, one_bit_add3, one_bit_add2);
+    println!("{}", simplify_makiwexp(two_bit_ripple));
+    println!("{}", simplify_makiwexp(&two_bit_ripple_formatted));
+    println!("{}", simplify_makiwexp(&two_bit_ripple_formatted2));
+    
+    let three_bit_ripple = format!("(CONCAT (SELECT () 0) (SELECT () 0) ())");
+    
+    // 3-bit ripple carry adder
+    println!("{}", simplify_makiwexp(&three_bit_ripple));
 }
 
