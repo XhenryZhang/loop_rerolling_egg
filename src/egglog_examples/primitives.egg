@@ -1,0 +1,9 @@
+; primitive types have semantics, + is a custom function over 2 i64 with a new i64 associated with the result
+(check (= (+ 2 2)  4))
+
+; (- 2 1) evaluates to a i64, which is added to the e-graph in the same e-class as (- 2 1)
+; checks if (- 2 1) and 1 belong to the same e-class. this is true because egglog has built in analyses for i64 types 
+(check (= (- 2 1)  1))
+(check (= (- 1 2) -1))
+(check (< 1 2))
+(check (> 1 -2))

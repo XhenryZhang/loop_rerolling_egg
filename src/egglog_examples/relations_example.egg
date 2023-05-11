@@ -1,0 +1,39 @@
+; (relation path (i64 i64)) is desugared to (function path (i64 i64) ())
+; a function maps each input to a unique output of the specified type
+; () is the unit type
+(relation path (i64 i64))
+(relation edge (i64 i64))
+
+; if (edge x y) exists then (path x y) also exists in the database
+(rule ((edge x y))
+      ((path x y)))
+
+; if (path x y) and (edge y z) exists then (path x z) is added to the database
+; AKA: the path function expands in domain, input {x,z} is mapped to ()
+(rule ((path x y) (edge y z))
+      ((path x z)))
+
+; database is a set of functions that are initially empty (here, the database is has functions "path" and "edge")
+; (edge 1 2) is desugared to (set (edge 1 2) ())
+; (set (edge 1 2) ()) adds the mapping {1,2} -> () to function "edge"
+(edge 1 2)
+(edge 2 3)
+(edge 3 4)
+
+; checks if {1,2} is present in the edge function
+(check (edge 1 2))
+(fail (check (path 1 2)))
+
+; runs for 3 iterations of fact generation
+(run 3)
+
+(print path) ; prints the state of the fact database
+(check (path 1 4))
+
+; in the function "path", input {1,4} and {1,2} both map to (), so they are in the same equivalence class
+(check (= (path 1 4) (path 1 2)))
+(check (= (path 1 2) (edge 1 2)))
+(check (= (path 2 4) (edge 3 4)))
+(fail (check (= (edge 2 3) (edge 3 10000)))) ; (edge 3 10000) isn't present, even though (edge 3 10000) would map to ()
+(fail (check (path 4 1)))
+

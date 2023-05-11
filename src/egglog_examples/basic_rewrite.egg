@@ -1,0 +1,40 @@
+(datatype Node
+ (mk i64))
+
+; ======================
+; (sort Node)
+; (function mk (i64) Node)
+; ======================
+
+(relation edge (Node Node))
+(relation path (Node Node))
+
+; rules add new maps to the database if existing maps are present, but not necessarily in the same e-class
+; in this example however, (edge x y) and (path x y) will be placed in the same e-class because they both evaluate to ()
+(rule ((edge x y))
+      ((path x y)))
+
+(rule ((path x y) (edge y z))
+      ((path x z)))
+
+; (edge (mk 1) (mk 2)) is added to the database to function "edge", as well as (mk 1) and (mk 2) to function "mk"
+(edge (mk 1) (mk 2))
+(edge (mk 2) (mk 3))
+(edge (mk 5) (mk 6))
+
+; if mk 3 is added, mk 5 is also added to the graph, BUT ALSO to the same e-class as mk 3
+; two things are in the same e-class if they evaluate to the same output
+; for the "mk" function, 3->[some canonical id, x] and 5->x
+(union (mk 3) (mk 5))
+(union (mk 30) (mk 10000))
+
+(run 10)
+(check (edge (mk 3) (mk 6)))
+(check (path (mk 1) (mk 6)))
+
+(check (mk 1))
+(check (mk 10000))
+(check (= (mk 30) (mk 10000)))
+(check (= (edge (mk 1) (mk 2)) (path (mk 1) (mk 2))))
+(fail (check (= (edge (mk 10) (mk 11)) (path (mk 10) (mk 11)))))
+

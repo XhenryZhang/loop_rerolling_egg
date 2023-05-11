@@ -1,0 +1,34 @@
+; foo doesn't take an argument and maps to an i64
+(function foo () i64 :merge (max old new))
+
+(set (foo) 0)
+
+; if foo exists, then add (set (foo) 1)
+(rule ((= f (foo))) ((set (foo) 1)))
+(run 100)
+
+(fail (check (= 0 foo)))
+(check (= 1 foo)) ; merge takes place, changes what "foo" with input {} maps to
+
+; This should run for about 50 iterations, because even though the merge doesn't
+; change the value of baz, it has a side effect of expanding the domain of bar because of the rle on line 26.
+(function baz (i64) i64 :default 0)
+
+; function bar's merge takes the minimum of function "baz"[new] and 0, where new is what "bar" evaluates to in the most up-to-date version
+; also generates baz
+(function bar () i64 :merge (min (baz new) 0))
+
+; (baz 5) ; since we have default, equivalent to writing (set (baz 5) 0)
+(set (bar) 1)
+(set (bar) 2) ; merge to (set (bar) 0), but also adds (set (baz 2) 0), because baz defaults to 0
+
+; if baz x exists, and x is less than 50, set bar to x + 1
+(rule ((= f (baz x)) (< x 50))
+      ((set (bar) (+ x 1))))
+
+(run 100)
+(check (baz 5) (baz 10))
+(check (= 0 (baz 50)))
+(fail (check (= 0 (baz 60))))
+(check (= (bar) 0))
+(fail (check (= bar 1)))

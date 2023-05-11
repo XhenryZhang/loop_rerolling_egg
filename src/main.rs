@@ -294,6 +294,10 @@ fn test_full_add_adv() {
     let three_bit_ripple = format!("(CONCAT (SELECT () 0) (SELECT () 0) ())");
     
     // 3-bit ripple carry adder
+    let three_bit_ripple: &str = "";
     println!("{}", simplify_makiwexp(&three_bit_ripple));
+
+    // 4-bit ripple carry adder
+    let four_bit_ripple: &str = "";
 }
 

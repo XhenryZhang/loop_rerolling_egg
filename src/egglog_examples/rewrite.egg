@@ -1,0 +1,53 @@
+(datatype Math
+  (Num i64)
+  (Var String)
+  (Add Math Math)
+  (Mul Math Math))
+
+; ===========================================
+; (sort Math)
+; (function Num (i64) Math)
+; (function Var (String) Math)
+; (function Add (Math Math) Math)
+; (function Mul (Math Math) Math)
+; ===========================================
+
+; this is legal, and the two expr3 will be merged
+; for user defined sorts, default merge behavior is to union the two ids
+(function expr3 () Math)
+(set (expr3) (Mul (Num 2) (Num 2)))
+(set (expr3) (Mul (Num 3) (Num 4)))
+; implict: (union (Mul (Num 2) (Num 2)) (Mul (Num 3) (Num 3)))
+(set (Var "y") (Mul (Num 3) (Num 4)))
+
+;; expr1 = 2 * (x + 3)
+; unique ID
+; desugars to: (function expr1 () Math), (set (expr1) (Mul (Num 2) ... ))
+; expr1 can't be called again in a "set" statement
+(define expr1 (Mul (Num 2) (Add (Var "x") (Num 3))))
+
+;; expr2 = 6 + 2 * x
+(define expr2 (Add (Num 6) (Mul (Num 2) (Var "x"))))
+
+; rule: if (Add a b) exists on the right side, bind it to root
+; rewrites target the output, and binds it to a arbitrary variable, and unions it with another variable
+; AKA: every time an input {a,b} is given for the "add" function, add a rule: (union (Add a b) (Add b a))
+;; (rule ((= __root (Add a b)))
+;;       ((union __root (Add b a)))
+
+; this is invalid because 'a' and 'b' must be explicit values when operated on by a union
+; (union (Add a b) (Add b a))
+
+(rewrite (Add a b)
+         (Add b a))
+(rewrite (Mul a (Add b c))
+         (Add (Mul a b) (Mul a c)))
+(rewrite (Add (Num a) (Num b)) 
+         (Num (+ a b)))
+(rewrite (Mul (Num a) (Num b))
+         (Num (* a b)))
+
+(run 10)
+(check (= expr1 expr2))
+(check (= (Var "y") (Mul (Num 3) (Num 4))))
+(check (= (Var "y") (Mul (Num 2) (Num 2))))
