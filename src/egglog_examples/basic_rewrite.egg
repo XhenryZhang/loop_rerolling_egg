@@ -26,6 +26,8 @@
 ; two things are in the same e-class if they evaluate to the same output
 ; for the "mk" function, 3->[some canonical id, x] and 5->x
 (union (mk 3) (mk 5))
+
+; union adds (mk 30) and (mk 10000) to the database
 (union (mk 30) (mk 10000))
 
 (run 10)

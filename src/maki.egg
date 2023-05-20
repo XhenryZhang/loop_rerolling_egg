@@ -1,0 +1,206 @@
+; W creates a 1-bit wire with a given name
+(datatype WireType
+    (W String))
+
+(declare True WireType)
+(declare False WireType)
+
+(datatype MakiWexp
+    (Wire WireType)
+    (FullAdd MakiWexp MakiWexp MakiWexp)
+    (HalfAdd MakiWexp MakiWexp)
+    (NBitAdd MakiWexp MakiWexp)
+    (And MakiWexp MakiWexp)
+    (Or MakiWexp MakiWexp)
+    (Not MakiWexp)
+    (Xor MakiWexp MakiWexp)
+    (Concat MakiWexp MakiWexp)
+    (Select MakiWexp i64)
+)
+
+; --- rules to create intermediate wires ---
+; idea: if we count the number of repeated netlist elements in the original, set a counter
+; if the counter reaches a user-defined value, create a new WireType and associate it
+; with that wire expression via the evals-to function.
+; ------------------------------------------
+
+; associate overall circuit wires as well as intermediate (non-input) wires with the MakiWexp they represent
+(function evals-to (WireType) MakiWexp)
+
+; Tentative: WiresInWexp will initially contain all the input wires to the circuit
+; After rewriting, Wires should change to include wires (including intermediate wires)
+; that will be present as WireVectors in the decompiled program. 
+(sort Wires (Set WireType))
+(function wires-in-wexp (MakiWexp) Wires :merge new)
+
+; --- rules to identify input wires ---
+(rule ((= e (Wire name)))
+      ((set (wires-in-wexp e) (set-insert (set-empty) name))))
+
+(rule ((= e (And e1 e2))
+       (= (wires-in-wexp e1) w1)
+       (= (wires-in-wexp e2) w2))
+      ((set (wires-in-wexp e) (set-union w1 w2))))
+
+(rule ((= e (Or e1 e2))
+       (= (wires-in-wexp e1) w1)
+       (= (wires-in-wexp e2) w2))
+      ((set (wires-in-wexp e) (set-union w1 w2))))
+
+(rule ((= e (Xor e1 e2))
+       (= (wires-in-wexp e1) w1)
+       (= (wires-in-wexp e2) w2))
+      ((set (wires-in-wexp e) (set-union w1 w2))))
+
+(rule ((= e (Concat e1 e2))
+       (= (wires-in-wexp e1) w1)
+       (= (wires-in-wexp e2) w2))
+      ((set (wires-in-wexp e) (set-union w1 w2))))
+
+(rule ((= e (Not e1))
+       (= (wires-in-wexp e1) w1))
+      ((set (wires-in-wexp e) w1)))
+
+(rule ((= e (Not e1))
+       (= (wires-in-wexp e1) w1))
+      ((set (wires-in-wexp e) w1)))
+
+(rule ((= e (Select e1 b))
+       (= (wires-in-wexp e1) w1))
+      ((set (wires-in-wexp e) w1)))
+
+(rule ((= e (HalfAdd e1 e2))
+       (= (wires-in-wexp e1) w1)
+       (= (wires-in-wexp e2) w2))
+      ((set (wires-in-wexp e) (set-union w1 w2))))
+
+(rule ((= e (FullAdd e1 e2 e3))
+       (= (wires-in-wexp e1) w1)
+       (= (wires-in-wexp e2) w2)
+       (= (wires-in-wexp e3) w3))
+      ((set (wires-in-wexp e) (set-union w1 (set-union w2 w3)))))
+; -------------------------------------
+
+; each wire is associated with a bitwidth (input wires will default to bitwidth of 1)
+(function bitwidth (WireType) i64 :merge (max old new) :default 1) 
+
+; if a wire exists, we add a default bitwidth of 1 for it
+(rule ((W x))
+      ((bitwidth (W x))))
+
+; --- rewrite rules ---
+; comm-and
+(rewrite (And a b) (And b a))
+; assoc-and
+(rewrite (And (And a b) c) (And a (And b c)))
+; comm-or
+(rewrite (Or a b) (Or b a))
+; assoc-or
+(rewrite (Or (Or a b) c) (Or a (Or b c)))
+; comm-xor
+(rewrite (Xor a b) (Xor b a))
+; assoc-xor
+(rewrite (Xor (Xor a b) c) (Xor a (Xor b c)))
+; double-neg
+(rewrite (Not (Not a)) a)
+; or-true
+(rewrite (Or a (Not a)) (Wire True))
+; and-false
+(rewrite (And a (Not a)) (Wire False))
+; and-identity
+(rewrite (And a (Wire True)) a)
+; or-identity
+(rewrite (Or a (Wire False)) a)
+; or-kill
+(rewrite (Or a (Wire True)) (Wire True))
+; and-kill
+(rewrite (And a (Wire False)) (Wire False))
+; and-idem
+(rewrite (And a a) a)
+; or-idem
+(rewrite (Or a a) a)
+; absorb1
+(rewrite (Or a (And a b)) a)
+; absorb2
+(rewrite (And a (Or a b)) a)
+; absorb3
+(rewrite (And a (Or (Not a) b)) (And a b))
+; absorb4
+(rewrite (Or a (And (Not a) b)) (Or a b))
+; xor-neg-id
+(rewrite (Xor a (Wire True)) (Not a))
+; xor-identity
+(rewrite (Xor a (Wire False)) a)
+
+; xor-conv
+(birewrite (Xor a b) (And (Or a b) (Not (And a b))))
+; xor-conv2
+(birewrite (Xor a b) (Or (And (Not a) b) (And a (Not b))))
+; xor-and-comm
+(birewrite (Or (And a b) (And c (Xor a b))) (Or (And a c) (And b (Xor a c))))
+; demorgan
+(birewrite (Not (And a b)) (Or (Not a) (Not b)))
+; demorgan2
+(birewrite (Not (Or a b)) (And (Not a) (Not b)))
+; dist-and-or
+(birewrite (And a (Or b c)) (Or (And a b) (And a c)))
+; dist-or-and
+(birewrite (Or a (And b c)) (And (Or a b) (Or a c)))
+
+; half-add
+(rewrite (Concat (And a b) (Xor a b)) (HalfAdd a b))
+; full-add
+(rewrite (Concat (Xor (Xor a b) cin) (Or (Or (And a b) (And a cin)) (And b cin))) (FullAdd a b cin))
+; comm-full-add
+(rewrite (FullAdd a b c) (FullAdd b a c))
+; comm-full-add2
+(rewrite (FullAdd a b c) (FullAdd c b a))
+; comm-full-add3
+(rewrite (FullAdd a b c) (FullAdd a c b))
+; ---------------------
+
+; TODO: concat returns a wirevector that is combined size of previous ones
+(push)
+; input for W "bob" and "pete" evaluates to unique wires
+(W "bob")
+(W "pete")
+(run 10)
+; check wires default to bitwidth 1
+; (check (= (bitwidth (W "bob")) (bitwidth (W "pete"))))
+(pop)
+
+; (push)
+; (define full-add1 
+;     (Concat (Xor (Xor (Wire (W "a")) (Wire (W "b"))) (Wire (W "cin"))) (Or (Or (And (Wire (W "a")) (Wire (W "b"))) (And (Wire (W "a")) (Wire (W "cin")))) (And (Wire (W "b")) (Wire (W "cin"))))))
+; (define full-add2
+;     (Concat (Xor (Xor (Wire (W "cin")) (Wire (W "b"))) (Wire (W "a"))) (Or (Or (And (Wire (W "cin")) (Wire (W "b"))) (And (Wire (W "a")) (Wire (W "cin")))) (And (Wire (W "b")) (Wire (W "a"))))))
+; (run 1000)
+; (check (= full-add1 full-add2))
+; (pop)
+
+(push)
+(define a (Xor (Wire (W "b0")) (Wire (W "a0"))))
+(define b (Xor (Wire (W "a0")) (Wire (W "b0"))))
+(run 100)
+(check (= a b))
+(pop)
+
+(push)
+(define one-bit-add
+    (Concat (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin"))) (Or (And (Wire (W "b0")) (Wire(W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0"))))))
+)
+(run 10)
+(extract one-bit-add)
+(pop)
+
+(push)
+(run 10)
+(pop)
+
+(push)
+(run 10)
+(pop)
+
+(push)
+(run 10)
+(pop)

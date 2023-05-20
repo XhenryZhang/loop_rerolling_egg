@@ -13,12 +13,14 @@
 ; ===========================================
 
 ; this is legal, and the two expr3 will be merged
-; for user defined sorts, default merge behavior is to union the two ids
+; for user defined sorts, default :merge behavior is to union the two ids
 (function expr3 () Math)
 (set (expr3) (Mul (Num 2) (Num 2)))
 (set (expr3) (Mul (Num 3) (Num 4)))
-; implict: (union (Mul (Num 2) (Num 2)) (Mul (Num 3) (Num 3)))
-(set (Var "y") (Mul (Num 3) (Num 4)))
+; implict: (union (Mul (Num 2) (Num 2)) (Mul (Num 3) (Num 4)))
+
+; var "y" has a canonical id of (Mul (Num 3) (Num 4))
+(set (Var "y") (Mul (Num 100) (Num 100)))
 
 ;; expr1 = 2 * (x + 3)
 ; unique ID
@@ -29,6 +31,10 @@
 ;; expr2 = 6 + 2 * x
 (define expr2 (Add (Num 6) (Mul (Num 2) (Var "x"))))
 
+(define expr4 (Num 50))
+(define expr5 (Add (Num 123) (Num 123)))
+; (define expr5 (Add expr4 expr4))
+
 ; rule: if (Add a b) exists on the right side, bind it to root
 ; rewrites target the output, and binds it to a arbitrary variable, and unions it with another variable
 ; AKA: every time an input {a,b} is given for the "add" function, add a rule: (union (Add a b) (Add b a))
@@ -37,9 +43,16 @@
 
 ; this is invalid because 'a' and 'b' must be explicit values when operated on by a union
 ; (union (Add a b) (Add b a))
+(union (Num 50) (Num 60))
+
+;(Add (Num 4) (Num 10)) ; Add->{num 4, num 10} maps to some canonical id in the domain of math
+;(define expr5 (Add (Num 4) (Num 10))) ; Expr5->{{}} maps to some canonical id in the domain of math
+
 
 (rewrite (Add a b)
          (Add b a))
+(rewrite (Mul a b)
+         (Mul b a))
 (rewrite (Mul a (Add b c))
          (Add (Mul a b) (Mul a c)))
 (rewrite (Add (Num a) (Num b)) 
@@ -47,7 +60,25 @@
 (rewrite (Mul (Num a) (Num b))
          (Num (* a b)))
 
-(run 10)
-(check (= expr1 expr2))
-(check (= (Var "y") (Mul (Num 3) (Num 4))))
-(check (= (Var "y") (Mul (Num 2) (Num 2))))
+(run 20)
+; (check (= expr1 expr2))
+
+; (check (= (Var "y") (Mul (Num 3) (Num 4))))
+; (check (= (Var "y") (Mul (Num 2) (Num 2))))
+; (check (= (Var "y") expr3))
+; (check (= (Var "y") (Mul (Num 4) (Num 3))))
+; (check (= (Var "y") (Num 4))) ; this means the canonical ids of the two are the same
+; (check (= (Var "y") (Num 12)))
+
+; (check (= expr5 (Add (Num 4) (Num 10))))
+(check expr4)
+(check (Num 50))
+(check (Num 60))
+(check (Num 100))
+(fail (check (Add (Num 4) (Num 10))))
+(extract (Add (Num 4) (Num 10))) ; we don't know what Add (Num 4) (Num 10) maps to because it isn't present in our thing
+(check (Add (Num 4) (Num 10)))
+(extract (Add (Num 4) (Num 10)))
+(check (Num 246))
+(check (Num 10000))
+; (check (= (Add expr4 expr4) (Num 10)))
