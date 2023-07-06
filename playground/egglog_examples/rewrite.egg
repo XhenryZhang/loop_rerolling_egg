@@ -43,11 +43,11 @@
 
 ; this is invalid because 'a' and 'b' must be explicit values when operated on by a union
 ; (union (Add a b) (Add b a))
+
 (union (Num 50) (Num 60))
 
 ;(Add (Num 4) (Num 10)) ; Add->{num 4, num 10} maps to some canonical id in the domain of math
 ;(define expr5 (Add (Num 4) (Num 10))) ; Expr5->{{}} maps to some canonical id in the domain of math
-
 
 (rewrite (Add a b)
          (Add b a))

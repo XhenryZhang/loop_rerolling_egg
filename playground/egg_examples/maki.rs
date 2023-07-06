@@ -2,7 +2,6 @@ use egg::{*};
 use termion::{color};
 
 // Represents all bit operations in Maki, 1:1 translation from synthesized netlist into a chain of SEQ and DEF statements
-// Deprecated: not using SEQ or DEF statements in intermediate representation
 define_language! {
     enum Maki {
         "SEQ" = Sequence([Id; 2]),
@@ -57,7 +56,7 @@ define_language! {
 // (SEQ (DEF sum tmp19))
 // (SEQ (DEF tmp21 (OR tmp20 tmp22)))))))))))
 
-// Rewrite rules for Maki [DEPRECATED]
+// Rewrite rules
 fn make_rules_maki() -> Vec<Rewrite<Maki, ()>> {
     let v = vec![
         rewrite!("comm_add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
@@ -132,7 +131,6 @@ fn make_rules_makiwexp() -> Vec<Rewrite<MakiWexp, ()>> {
     v
 }
 
-// [Deprecated]
 fn simplify_maki(s: &str) -> String {
     let expr: RecExpr<Maki> = s.parse().unwrap();
 
@@ -152,7 +150,6 @@ fn simplify_maki(s: &str) -> String {
     best.to_string()
 }
 
-// rewrites a makiwexp to its simplest (shortest) equivalent form
 fn simplify_makiwexp(s: &str) -> String {
     let expr: RecExpr<MakiWexp> = s.parse().unwrap();
     let runner = Runner::default().with_expr(&expr).run(&make_rules_makiwexp());
@@ -164,7 +161,6 @@ fn simplify_makiwexp(s: &str) -> String {
     best.to_string()
 }
 
-// checks (via assertion) if two makiwexps are semantically equivalent or unequivalent
 fn compare_makiwexp(s1: &str, s2: &str, equal: bool) {
     let expr1: RecExpr<MakiWexp> = s1.parse().unwrap();
     let expr2: RecExpr<MakiWexp> = s2.parse().unwrap();
@@ -232,13 +228,7 @@ fn compare_bitlogic() {
 fn main() {
     // sanity check
     println!("{}", simplify_makiwexp("(NOT (NOT true))"));
-
-    println!("========= IMPORTANT =========");
-    println!("This is a sanity check. To test the Egg rewrites present in this file, please run `cargo test`.");
-    println!("Feel free to modify this file and add your own test cases.");
-    println!("I used Egg for the preliminary stages of this project but have moved to using the Egglog binary package for the final tool.");
-    println!("Egglog expands upon the functionality of the Egg library, refer to: https://arxiv.org/abs/2304.04332");
-    println!("=============================");
+    // test_makiwexp();
 }
 
 #[test]
