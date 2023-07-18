@@ -1,0 +1,107 @@
+(include "./maki_decomp.egg")
+; ---- TEST CODE BELOW ----
+
+; TODO: when NbitAdd is detected and FullAdd is detected, create intermediate variable from concatenations
+(push)
+; input for W "bob" and "pete" evaluates to unique wires
+(Wire (W "bob"))
+(Wire (W "pete"))
+(define a (And (Wire (W "bob")) (Wire False)))
+(define b (Wire True))
+(define c (And (Wire (W "bob")) (Wire True)))
+(define d (NBitAdd (Wire (W "a")) (Wire (W "b")) (Wire (W "c"))))
+(run 10)
+; check wires default to bitwidth 1
+(check (= (bitwidth-wexp (Wire False)) 1))
+(check (= (bitwidth-wexp (Wire (W "bob"))) (bitwidth-wexp (Wire (W "pete")))))
+(check (= (bitwidth-wire (W "bob")) (bitwidth-wire (W "pete"))))
+(extract a)
+(extract b)
+(extract c)
+(extract d)
+(pop)
+
+(push)
+(define a (And (Wire (W "bob")) (Wire (W "pete"))))
+(check (W "pete"))
+(check (Wire (W "bob")))
+(run 10)
+; (extract (bitwidth-wexp a))
+(check (= (bitwidth-wire (W "bob")) 1))
+(check (= (bitwidth-wexp a) 1))
+(pop)
+
+(push)
+(define full-add1 
+      (Concat (Xor (Xor (Wire (W "a")) (Wire (W "b"))) (Wire (W "cin"))) (Or (Or (And (Wire (W "a")) (Wire (W "b"))) (And (Wire (W "a")) (Wire (W "cin")))) (And (Wire (W "b")) (Wire (W "cin"))))))
+(define full-add2
+      (Concat (Xor (Xor (Wire (W "cin")) (Wire (W "b"))) (Wire (W "a"))) (Or (Or (And (Wire (W "cin")) (Wire (W "b"))) (And (Wire (W "a")) (Wire (W "cin")))) (And (Wire (W "b")) (Wire (W "a"))))))
+(run 10)
+(check (= full-add1 full-add2))
+(pop)
+
+(push)
+(define a (Xor (Wire (W "b0")) (Wire (W "a0"))))
+(define b (Xor (Wire (W "a0")) (Wire (W "b0"))))
+(run 1)
+(check (= a b))
+(pop)
+
+(push)
+(define one-bit-add
+    (Concat (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0"))))) (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin"))))
+)
+(run 7)
+(extract (bitwidth-wexp one-bit-add))
+(extract (bitwidth-wexp (Wire (W "b0"))))
+(extract (bitwidth-wire (W "b0")))
+(extract one-bit-add)
+(pop)
+
+(push)
+; test half-add / one-bit-add equivalence if carry in bit is empty (False)
+(define one-bit-add-carry-in-empty
+    (Concat (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire False) (Xor (Wire (W "b0")) (Wire (W "a0"))))) (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire False)))
+)
+(run 7)
+; (run 1)
+(check (= one-bit-add-carry-in-empty (FullAdd (Wire (W "b0")) (Wire (W "a0")) (Wire False))))
+(check (= (bitwidth-wexp one-bit-add-carry-in-empty) 2))
+(check (= (bitwidth-wexp (Wire (W "b0"))) 1))
+(check (= (bitwidth-wire (W "b0")) 1))
+(extract one-bit-add-carry-in-empty) ; evaluates to half add
+(pop)
+
+(push)
+; TODO: test exponential runtime of non adder circuits
+(define generic-circuit
+      (And (And (Wire (W "a")) (Wire (W "b"))) (Or (Wire (W "b")) (Wire (W "c")))))
+
+(define generic-circuit-2
+      (And (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0"))))) (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin")))))
+(run 7)
+(extract generic-circuit)
+(extract generic-circuit-2)
+(pop)
+
+(push)
+; test 2-bit-add
+(define two-bit-add
+      (Concat (FullAdd (Wire (W "a1")) (Wire (W "b1")) (Select (FullAdd (Wire (W "a0")) (Wire (W "b0")) (Wire (W "cin"))) 1 1)) (Select (FullAdd (Wire (W "a0")) (Wire (W "b0")) (Wire (W "cin"))) 0 0))
+)
+(run 10)
+(extract two-bit-add)
+(extract (bitwidth-wexp two-bit-add))
+(pop)
+
+(push)
+; test 3-bit-add
+
+(run 10)
+(pop)
+
+(push)
+; test 4-bit-add
+
+(run 10)
+(pop)

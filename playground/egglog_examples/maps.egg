@@ -1,0 +1,31 @@
+(sort MyMap (Map i64 String))
+(sort MyI64 (Set i64))
+(sort VeryDefault)
+
+(define swagleon (set-of 1 2 3 4 5))
+
+(function test_printer (i64 i64) MyI64)
+(function test_default (i64) VeryDefault)
+
+(set (test_printer 1 2) (set-of 1 2 3))
+(set (test_printer 3 4) (set-of 4 5 6))
+(test_default 5)
+(test_default 500)
+
+(define my_map1 (map-insert (map-empty) 1 "one"))
+(define my_map2 (map-insert my_map1 2 "two"))
+(define my_map22 (map-insert (map-insert (map-empty) 1 "one") 2 "two"))
+(define my_map3 (map-insert (map-insert (map-insert my_map2 3 "three") 3 "three") 4 "four"))
+
+(check (= "one" (map-get my_map1 1)))
+(check (= my_map2 my_map22))
+
+(extract my_map3)
+(print-size swagleon) ; size 1
+(print test_printer)
+; (test_printer 1 2) -> (set-insert (set-insert (set-insert (set-empty) 3) 2) 1)
+; (test_printer 3 4) -> (set-insert (set-insert (set-insert (set-empty) 6) 5) 4)
+
+(print test_default)
+; (test_default 5) -> (test_default 5)
+; (test_default 500) -> (test_default 500)
