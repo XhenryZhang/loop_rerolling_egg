@@ -1,0 +1,3 @@
+[submodule "egglog"]
+	path = egglog
+	url = https://github.com/egraphs-good/egglog.git
