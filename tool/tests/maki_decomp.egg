@@ -1,4 +1,4 @@
-(include "./maki_decomp.egg")
+(include "../tool/maki_decomp.egg")
 ; ---- TEST CODE BELOW ----
 
 ; TODO: when NbitAdd is detected and FullAdd is detected, create intermediate variable from concatenations
@@ -64,7 +64,6 @@
     (Concat (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire False) (Xor (Wire (W "b0")) (Wire (W "a0"))))) (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire False)))
 )
 (run 7)
-; (run 1)
 (check (= one-bit-add-carry-in-empty (FullAdd (Wire (W "b0")) (Wire (W "a0")) (Wire False))))
 (check (= (bitwidth-wexp one-bit-add-carry-in-empty) 2))
 (check (= (bitwidth-wexp (Wire (W "b0"))) 1))
@@ -92,6 +91,8 @@
 (run 10)
 (extract two-bit-add)
 (extract (bitwidth-wexp two-bit-add))
+(print evals-to 100)
+(print bitwidth-wire 100)
 (pop)
 
 (push)

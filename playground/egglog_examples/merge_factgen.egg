@@ -19,8 +19,8 @@
 (function bar () i64 :merge (min (baz new) 0))
 
 ; (baz 5) ; since we have default, equivalent to writing (set (baz 5) 0)
-(set (bar) 1)
-(set (bar) 2) ; merge to (set (bar) 0), but also adds (set (baz 2) 0), because baz defaults to 0
+;(set (bar) 1)
+;(set (bar) 2) ; merge to (set (bar) 0), but also adds (set (baz 2) 0), because baz defaults to 0
 
 ; if baz x exists, and x is less than 50, set bar to x + 1
 (rule ((= f (baz x)) (< x 50))
@@ -30,5 +30,5 @@
 (check (baz 5) (baz 10))
 (check (= 0 (baz 50)))
 (fail (check (= 0 (baz 60))))
-(check (= (bar) 0))
+(check (= bar 0))
 (fail (check (= bar 1)))

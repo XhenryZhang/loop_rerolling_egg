@@ -2,26 +2,35 @@
 ; when a new path is created, if the input tuple already exists, the existing output will be set to the minimum of the new path and the old path
 (function path (i64 i64) i64 :merge (min old new))
 (function pathtest (i64 i64) i64 :merge new)
+(function times-ran () i64 :merge (+ old 1))
 
 ; "=" binds output of (edge x y) to the variable len, so we can use "len" in the action clause of the rule
 ; a new path will be created that evaluates to whatever len evaluates to
 (rule ((= (edge x y) len))
-      ((set (path x y) len)))
+      ((set (path x y) len)
+       (set (times-ran) 0)))
+
 ; since xy and yz are known to be i64, a new path will be created that evaluates to the result of (+ xy yz)
 (rule ((= (path x y) xy) (= (edge y z) yz))
-      ((set (path x z) (+ xy yz))))
+      ((set (path x z) (+ xy yz))
+       (set (times-ran) 0)))
 
+(set (times-ran) 1)
 (set (pathtest 1 1) 1)
 (set (pathtest 1 1) 2) ; by default needs to specify how to merge for primitives
 (set (edge 1 2) 10)
-(set (edge 2 3) 10)
+(set (edge 1 4) 10)
 (set (edge 1 3) 30)
 (set (edge 1 1000) 2)
 
 ; (union (edge 1 2) (edge 1 1000)) ERROR: base (primitive) types cannot be unioned
 
-(run 3)
+(run 6)
+(extract (times-ran))
+(check (path 1 2))
+(check (path 2 3))
 (check (path 1 3))
+(extract (path 1 3))
 (check (= (pathtest 1 1) 2))
 
 ; they are equivalent because they map to the same i64: 10
@@ -32,3 +41,4 @@
 
 ; edge {1,3}->30, path {1,3}->20
 (fail (check (= (edge 1 3) (path 1 3))))
+

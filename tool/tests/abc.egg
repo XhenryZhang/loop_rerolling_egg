@@ -1,5 +1,24 @@
-(include "./maki_decomp.egg")
-
+; (include "./maki_decomp.egg")
 (check (= (+ "abc" "def") "abcdef"))
 
-; FEAT: test string contatenation with integers
+(datatype MakiWexp
+    (Wire String)
+    (FullAdd MakiWexp MakiWexp MakiWexp)
+    (HalfAdd MakiWexp MakiWexp)
+    (NBitAdd MakiWexp MakiWexp MakiWexp)
+    (And MakiWexp MakiWexp)
+    (Or MakiWexp MakiWexp)
+    (Not MakiWexp)
+    (Xor MakiWexp MakiWexp)
+    ; SEMANTICS - Concats the two Wexps, where most signficant bit is the most significant bit of the first MakiWexp argument
+    (Concat MakiWexp MakiWexp)
+    ; SEMANTICS - Select the ith bit from Wexp
+    (Select MakiWexp i64 i64)
+)
+
+(function evals-to (String) MakiWexp :cost 10000)
+
+(union (evals-to "kaitlyn") (And (Wire "a") (Wire "b")))
+(print evals-to)
+(print And)
+(check (= (evals-to "kaitlyn") (And (Wire "a") (Wire "b"))))

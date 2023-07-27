@@ -1,0 +1,33 @@
+; W is a function that maps "string" to canonical id for WireType
+(datatype WireType
+    (W String))
+
+; True/False/Empty are WireTypes with undefined input that evaluates to a unique canonical Id
+(declare True WireType)
+(declare False WireType)
+(declare Empty WireType)
+
+(datatype WireOp
+    (Wire )
+    (And String String)
+    (Or String String)
+    (Not String)
+    (Xor String String)
+
+    ; SEMANTICS - Concats the two Wexps, where most signficant bit is the most significant bit of the first MakiWexp argument
+    (Concat String String)
+    ; SEMANTICS - Select the ith bit from Wexp
+    (Select String i64 i64)
+)
+
+(datatype SynNetlistOutput
+    (Input bitwidth String)
+    (Temp String WireOp)
+    (Output bitwidth String String) ; ex: (c (:= tmp62)) becomes (Output 3 c tmp62)
+)
+
+; maps WireTypes to MakiWexp
+(function outputs (WireType) MakiWexp)
+(function bitwidth-wire (WireType) i64 :merge (max old new) :default 1)
+
+
