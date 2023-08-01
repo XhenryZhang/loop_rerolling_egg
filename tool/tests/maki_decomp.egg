@@ -1,26 +1,6 @@
 (include "../tool/maki_decomp.egg")
 ; ---- TEST CODE BELOW ----
 
-; TODO: when NbitAdd is detected and FullAdd is detected, create intermediate variable from concatenations
-(push)
-; input for W "bob" and "pete" evaluates to unique wires
-(Wire (W "bob"))
-(Wire (W "pete"))
-(define a (And (Wire (W "bob")) (Wire False)))
-(define b (Wire True))
-(define c (And (Wire (W "bob")) (Wire True)))
-(define d (NBitAdd (Wire (W "a")) (Wire (W "b")) (Wire (W "c"))))
-(run 10)
-; check wires default to bitwidth 1
-(check (= (bitwidth-wexp (Wire False)) 1))
-(check (= (bitwidth-wexp (Wire (W "bob"))) (bitwidth-wexp (Wire (W "pete")))))
-(check (= (bitwidth-wire (W "bob")) (bitwidth-wire (W "pete"))))
-(extract a)
-(extract b)
-(extract c)
-(extract d)
-(pop)
-
 (push)
 (define a (And (Wire (W "bob")) (Wire (W "pete"))))
 (check (W "pete"))

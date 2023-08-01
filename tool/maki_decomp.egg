@@ -16,6 +16,8 @@
 
 (datatype MakiWexp
     (Wire WireType)
+    ; SEMANTICS - (Const <value> <bitwidth>)
+    (Const i64 i64)
     (FullAdd MakiWexp MakiWexp MakiWexp)
     (HalfAdd MakiWexp MakiWexp)
     (NBitAdd MakiWexp MakiWexp MakiWexp)
@@ -25,7 +27,7 @@
     (Xor MakiWexp MakiWexp)
     ; SEMANTICS - Concats the two Wexps, where most signficant bit is the most significant bit of the first MakiWexp argument
     (Concat MakiWexp MakiWexp)
-    ; SEMANTICS - Select the ith bit from Wexp
+    ; SEMANTICS - (Select <least sig bit> <most sig bit>) - inclusive
     (Select MakiWexp i64 i64)
 )
 
@@ -33,7 +35,7 @@
 ; After rewriting, Wires should change to include wires (including intermediate wires)
 ; that will be present as WireVectors in the decompiled Python program. 
 (sort Wires (Set WireType))
-(function wires-in-wexp (MakiWexp) Wires :merge new)
+(function wires-in-wexp (MakiWexp) Wires :merge new :default (set-empty))
 
 ; --- rules to identify input wires ---
 (rule ((= e (Wire name)))
