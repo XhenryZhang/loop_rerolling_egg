@@ -22,10 +22,29 @@
 
 ; check default wires evaluate to bitwidth 1
 (push)
-(check (= (bitwidth-wexp (Wire False)) 1))
-(check (= (bitwidth-wexp (Wire Empty)) 1))
+(define a (Wire False))
+(define b (Wire Empty))
+(run 10)
+(check (= (bitwidth-wexp a) 1))
+(check (= (bitwidth-wexp b) 1))
 (pop)
 
 ; check constant wires evaluate properly in wires-in-wexp
 (push)
+(Const 10 34)
+(Const 20 324)
+(run 10)
+(check (= (bitwidth-wexp (Const 10 34)) 34))
+(check (= (bitwidth-wexp (Const 20 324)) 324))
+(pop)
+
+; check equivalence between CONST wires and Wire TRUE and Wire FALSE
+(push)
+(define a (Wire False))
+(define b (Concat a (And (Wire (W "b")) (Wire (W "c")))))
+(run 10)
+(check (= (Wire False) (Const 0 1)))
+(check (= a (Const 0 1)))
+(check (= (bitwidth-wexp a) 1))
+(check (= (bitwidth-wexp b) 2))
 (pop)

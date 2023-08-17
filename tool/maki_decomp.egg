@@ -5,6 +5,9 @@
 ; immediate wire name
 (define wname "w_")
 
+; ripple carry adder name
+(define rcadder-name "rc_")
+
 ; W is a function that maps "string" to canonical id for WireType
 (datatype WireType
     (W String))
@@ -29,6 +32,10 @@
     (Concat MakiWexp MakiWexp)
     ; SEMANTICS - (Select <least sig bit> <most sig bit>) - inclusive
     (Select MakiWexp i64 i64)
+    ; SEMANTICS - (AddSum <addend A> <addend B> <carry-in> <ith bit>)
+    (AddSum MakiWexp MakiWexp MakiWexp i64)
+    ; SEMANTICS - (AddCarry <addend A> <addend B> <carry-in> <ith bit>)
+    (AddCarry MakiWexp MakiWexp MakiWexp i64)
 )
 
 ; Tentative: wires-in-wexp will initially contain all the input wires to the circuit
@@ -40,6 +47,9 @@
 ; --- rules to identify input wires ---
 (rule ((= e (Wire name)))
       ((set (wires-in-wexp e) (set-insert (set-empty) name))))
+
+(rule ((= e (Const value bitwidth)))
+      ((set (wires-in-wexp e) (set-empty))))
 
 (rule ((= e (And e1 e2))
        (= (wires-in-wexp e1) w1)
@@ -86,17 +96,23 @@
        (= (wires-in-wexp e3) w3))
       ((set (wires-in-wexp e) (set-union w1 (set-union w2 w3)))))
 ; -------------------------------------
-
 ; each wire is associated with a bitwidth (input wires will default to bitwidth of 1)
-(function bitwidth-wexp (MakiWexp) i64 :merge (max old new) :default 1) 
-(function bitwidth-wire (WireType) i64 :merge (max old new) :default 1)
+(function bitwidth-wexp (MakiWexp) i64 :merge new :default 1) 
+(function bitwidth-wire (WireType) i64 :merge new :default 1)
 
+(ruleset bitwidth-rules)
 ; wires upon input have default bitwidth of 1
 (rule ((Wire x))
       ((bitwidth-wexp (Wire x))))
-
 (rule ((W x))
       ((bitwidth-wire (W x))))
+
+; Const wexps have bitwidth as part of their syntax
+(rule ((= e (Const value bitwidth)))
+      ((set (bitwidth-wexp e) bitwidth)))
+(rule ((= e (Const value bitwidth))
+       (= 0 bitwidth))
+      ((panic "ERROR: Bitwidth for a CONST wire cannot be 0")))
 
 ; add a rule that preserves bitwidth if operation is not Concat or select
 (rule ((= e (And e1 e2))
@@ -159,7 +175,7 @@
       ((panic "ERROR: carry-in wires to adder should be 1 bit in width")))
 ;--------------------------------------------------------------------
 
-; --- rules to create intermediate wires ---
+; --- TODO: rules to create intermediate wires ---
 ; idea: if we count the number of repeated netlist elements in the original, set a counter
 ; if the counter reaches a user-defined value, create a new WireType and associate it
 ; with that wire expression via the evals-to function.
@@ -177,6 +193,7 @@
       ((set (bitwidth-wire name) w)))
 
 ; --- rewrite rules ---
+(ruleset rewrite-rules)
 ; comm-and
 (rewrite (And a b) (And b a))
 ; assoc-and
@@ -221,6 +238,9 @@
 (rewrite (Xor a (Wire False)) a)
 ; xor-idem
 (rewrite (Xor a a) (Wire False))
+; TRUE/FALSE
+(rewrite (Wire False) (Const 0 1))
+(rewrite (Wire True) (Const 1 1))
 
 ; ----- bidirectional rewrite rules -----
 ; xor-conv
@@ -238,64 +258,98 @@
 ; dist-or-and
 (rewrite (And (Or a b) (Or a c)) (Or a (And b c)))
 ; ----------------------------------------
-; half-add
-(rewrite (Concat (And a b) (Xor a b)) (HalfAdd a b))
-; full-add
-(rewrite (Concat (Or (Or (And a b) (And a cin)) (And b cin)) (Xor (Xor a b) cin)) (FullAdd a b cin))
-(rewrite (Concat (Or (And a b) (And cin (Xor b0 a0))) (Xor (Xor a b) cin)) (FullAdd a b cin))
+; AddSum, AddCarry
+(function ripple-carry (String) MakiWexp :cost 10000)
+;(function )
+
+; half-add new
+(rewrite (And a b) (AddCarry a b (Wire Empty) 0))
+(rewrite (Xor a b) (AddSum a b (Wire Empty) 0))
+(rule ((= c (AddCarry a b (Wire Empty) 0)) (= sum (AddSum a b (Wire Empty) 0)))
+      ((let name (+ rcadder-name (to-str (i64-gen))))
+       (set (i64-gen) -1)
+       (set (ripple-carry name) (HalfAdd a b))))
+
+; full-add new
+(rewrite (Xor (AddSum a b (Wire Empty) 0) cin) (AddSum a b cin 0))
+(rewrite (Or (Or (And a b) (And a cin)) (And b cin)) (AddCarry a b cin 0))
+(rewrite (Or (And a b) (And cin (Xor b a))) (AddCarry a b cin 0))
+(rule ((= c (AddCarry a b cin 0)) (= sum (AddSum a b cin 0)))
+      ((let name (+ rcadder-name (to-str (i64-gen))))
+       (set (i64-gen) -1) ; increment number tracker
+       (set (ripple-carry name) (FullAdd a b cin))))
+
 ; comm-full-add
 (rewrite (FullAdd a b c) (FullAdd b a c))
 ; comm-nbit-add
 (rewrite (NBitAdd a b c) (NBitAdd b a c))
 
+; full-add to 2bit-add
+(FullAdd a1 b1 (Select (FullAdd a0 b0 cin) 1 1))
+
+(rewrite (Xor (Xor a1 b1) (AddCarry a0 b0 cin 0)) (AddSum (Concat a1 a0) (Concat b1 b0) cin 1))
+(rewrite (Or (Or (And a1 b1) (And a1 (AddCarry a0 b0 cin 0))) (And b1 (AddCarry a0 b0 cin 0))) (AddCarry (Concat a1 a0) (Concat b1 b0) cin 1))
+(rewrite (Or (And a1 b1) (And (AddCarry a0 b0 cin 0) (Xor b1 a1))) (AddCarry (Concat a1 a0) (Concat b1 b0) cin 1))
+(rule ((= c (AddCarry a b cin 1)) (= sum (AddSum a b cin 1)))
+      ((let name (+ rcadder-name "nbit_" (to-str (i64-gen))))
+       (set (i64-gen) -1)
+       (set (ripple-carry name) (NBitAdd a b cin))))
+; ----------------------------------------------
+; half-add
+; (rewrite (Concat (And a b) (Xor a b)) (HalfAdd a b))
+
+; full-add
+; (rewrite (Concat (Or (Or (And a b) (And a cin)) (And b cin)) (Xor (Xor a b) cin)) (FullAdd a b cin))
+; (rewrite (Concat (Or (And a b) (And cin (Xor b a))) (Xor (Xor a b) cin)) (FullAdd a b cin))
+
 ; (base case) full-add to 2-bit-add
 ; (rewrite (Concat (FullAdd a1 b1 (Select (FullAdd a0 b0 cin) 1 1)) (Select (FullAdd a0 b0 cin) 0 0))
 ;         (NBitAdd a0 b0 cin))
-(rule ((= v (Concat (FullAdd a1 b1 (Select (FullAdd a0 b0 cin) 1 1)) (Select (FullAdd a0 b0 cin) 0 0))))
-      ((let op1 (Concat a1 a0))
-       (let op2 (Concat b1 b0))
-       (let name1 (+ wname "addend1_" (to-str (i64-gen))))
-       (let name2 (+ wname "addend2_" (to-str (i64-gen))))
-       (set (i64-gen) -1) ; increment number tracker
-       (set (evals-to (W name1)) op1)
-       (set (evals-to (W name2)) op2)
-       (union v (NBitAdd (Wire (W name1)) (Wire (W name2)) cin))))
+; (rule ((= v (Concat (FullAdd a1 b1 (Select (FullAdd a0 b0 cin) 1 1)) (Select (FullAdd a0 b0 cin) 0 0))))
+;       ((let op1 (Concat a1 a0))
+;        (let op2 (Concat b1 b0))
+;        (let name1 (+ wname "addend1_" (to-str (i64-gen))))
+;        (let name2 (+ wname "addend2_" (to-str (i64-gen))))
+;        (set (i64-gen) -1) ; increment number tracker
+;        (set (evals-to (W name1)) op1)
+;        (set (evals-to (W name2)) op2)
+;        (union v (NBitAdd (Wire (W name1)) (Wire (W name2)) cin))))
 
 ; ; (inductive case) n-bit-add to n+1-bit-add
-(rule ((= v (Concat (FullAdd a2 b2 (Select (NBitAdd a0 b0 cin) x x)) (Select (NBitAdd a0 b0 cin) 0 (- x 1))))) 
-      ((let op1 (Concat a2 a0))
-       (let op2 (Concat b2 b0))
-       (let name1 (+ wname "addend1_" (to-str (i64-gen))))
-       (let name2 (+ wname "addend2_" (to-str (i64-gen))))
-       (set (i64-gen) -1)
-       (set (evals-to (W name1)) op1)
-       (set (evals-to (W name2)) op2)
-       (union v (NBitAdd (Wire (W name1)) (Wire (W name2)) cin))))
+; (rule ((= v (Concat (FullAdd a2 b2 (Select (NBitAdd a0 b0 cin) x x)) (Select (NBitAdd a0 b0 cin) 0 (- x 1))))) 
+;       ((let op1 (Concat a2 a0))
+;        (let op2 (Concat b2 b0))
+;        (let name1 (+ wname "addend1_" (to-str (i64-gen))))
+;        (let name2 (+ wname "addend2_" (to-str (i64-gen))))
+;        (set (i64-gen) -1)
+;        (set (evals-to (W name1)) op1)
+;        (set (evals-to (W name2)) op2)
+;        (union v (NBitAdd (Wire (W name1)) (Wire (W name2)) cin))))
 
 ; ; (base case) full-add to 2-bit-add without carry in
 ; ; Wire "Empty" indicates no carry bit is input to the 2-bit-add
 ; (rewrite (Concat (FullAdd a1 b1 (Select (HalfAdd a0 b0) 1 1)) (Select (HalfAdd a0 b0) 0 0))
          ; (NBitAdd a0 b0 (Wire Empty)))
-(rule ((= v (Concat (FullAdd a1 b1 (Select (HalfAdd a0 b0) 1 1)) (Select (HalfAdd a0 b0) 0 0))))
-      ((let op1 (Concat a1 a0))
-       (let op2 (Concat b1 b0))
-       (let name1 (+ wname "addend1_" (to-str (i64-gen))))
-       (let name2 (+ wname "addend2_" (to-str (i64-gen))))
-       (set (i64-gen) -1) ; increment number tracker
-       (set (evals-to (W name1)) op1)
-       (set (evals-to (W name2)) op2)
-       (union v (NBitAdd (Wire (W name1)) (Wire (W name2)) (Wire Empty)))))
+; (rule ((= v (Concat (FullAdd a1 b1 (Select (HalfAdd a0 b0) 1 1)) (Select (HalfAdd a0 b0) 0 0))))
+;       ((let op1 (Concat a1 a0))
+;        (let op2 (Concat b1 b0))
+;        (let name1 (+ wname "addend1_" (to-str (i64-gen))))
+;        (let name2 (+ wname "addend2_" (to-str (i64-gen))))
+;        (set (i64-gen) -1) ; increment number tracker
+;        (set (evals-to (W name1)) op1)
+;        (set (evals-to (W name2)) op2)
+;        (union v (NBitAdd (Wire (W name1)) (Wire (W name2)) (Wire Empty)))))
 
 ; (inductive case) n-bit-add to n+1-bit-add
-(rule ((= v (Concat (FullAdd a2 b2 (Select (NBitAdd a0 b0 (Wire Empty)) x x)) (Select (NBitAdd a0 b0 (Wire Empty)) 0 (- x 1))))) 
-      ((let op1 (Concat a2 a0))
-       (let op2 (Concat b2 b0))
-       (let name1 (+ wname "addend1_" (to-str (i64-gen))))
-       (let name2 (+ wname "addend2_" (to-str (i64-gen))))
-       (set (i64-gen) -1)
-       (set (evals-to (W name1)) op1)
-       (set (evals-to (W name2)) op2)
-       (union v (NBitAdd (Wire (W name1)) (Wire (W name2)) (Wire Empty)))))
+; (rule ((= v (Concat (FullAdd a2 b2 (Select (NBitAdd a0 b0 (Wire Empty)) x x)) (Select (NBitAdd a0 b0 (Wire Empty)) 0 (- x 1))))) 
+;       ((let op1 (Concat a2 a0))
+;        (let op2 (Concat b2 b0))
+;        (let name1 (+ wname "addend1_" (to-str (i64-gen))))
+;        (let name2 (+ wname "addend2_" (to-str (i64-gen))))
+;        (set (i64-gen) -1)
+;        (set (evals-to (W name1)) op1)
+;        (set (evals-to (W name2)) op2)
+;        (union v (NBitAdd (Wire (W name1)) (Wire (W name2)) (Wire Empty)))))
 ; ----------------------------------------
 
 
