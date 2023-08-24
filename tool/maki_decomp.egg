@@ -18,24 +18,23 @@
 (declare Empty WireType)
 
 (datatype MakiWexp
-    (Wire WireType)
+    (Wire WireType :cost 1)
     ; SEMANTICS - (Const <value> <bitwidth>)
-    (Const i64 i64)
-    (FullAdd MakiWexp MakiWexp MakiWexp)
-    (HalfAdd MakiWexp MakiWexp)
-    (NBitAdd MakiWexp MakiWexp MakiWexp)
-    (And MakiWexp MakiWexp)
-    (Or MakiWexp MakiWexp)
-    (Not MakiWexp)
-    (Xor MakiWexp MakiWexp)
+    (Const i64 i64 :cost 1)
+    (HalfAdd MakiWexp MakiWexp :cost 1)
+    (NBitAdd MakiWexp MakiWexp MakiWexp :cost 1)
+    (And MakiWexp MakiWexp :cost 2)
+    (Or MakiWexp MakiWexp :cost 2)
+    (Not MakiWexp :cost 2)
+    (Xor MakiWexp MakiWexp :cost 2)
     ; SEMANTICS - Concats the two Wexps, where most signficant bit is the most significant bit of the first MakiWexp argument
-    (Concat MakiWexp MakiWexp)
+    (Concat MakiWexp MakiWexp :cost 1)
     ; SEMANTICS - (Select <least sig bit> <most sig bit>) - inclusive
-    (Select MakiWexp i64 i64)
+    (Select MakiWexp i64 i64 :cost 1)
     ; SEMANTICS - (AddSum <addend A> <addend B> <carry-in> <ith bit>)
-    (AddSum MakiWexp MakiWexp MakiWexp i64)
+    (AddSum MakiWexp MakiWexp MakiWexp i64 :cost 1)
     ; SEMANTICS - (AddCarry <addend A> <addend B> <carry-in> <ith bit>)
-    (AddCarry MakiWexp MakiWexp MakiWexp i64)
+    (AddCarry MakiWexp MakiWexp MakiWexp i64 :cost 1)
 )
 
 ; Tentative: wires-in-wexp will initially contain all the input wires to the circuit
@@ -84,17 +83,18 @@
        (= (wires-in-wexp e2) w2))
       ((set (wires-in-wexp e) (set-union w1 w2))))
 
-(rule ((= e (FullAdd e1 e2 e3))
-       (= (wires-in-wexp e1) w1)
-       (= (wires-in-wexp e2) w2)
-       (= (wires-in-wexp e3) w3))
-      ((set (wires-in-wexp e) (set-union w1 (set-union w2 w3)))))
+; (rule ((= e (FullAdd e1 e2 e3))
+;        (= (wires-in-wexp e1) w1)
+;        (= (wires-in-wexp e2) w2)
+;        (= (wires-in-wexp e3) w3))
+;       ((set (wires-in-wexp e) (set-union w1 (set-union w2 w3)))))
 
 (rule ((= e (NBitAdd e1 e2 e3))
        (= (wires-in-wexp e1) w1)
        (= (wires-in-wexp e2) w2)
        (= (wires-in-wexp e3) w3))
       ((set (wires-in-wexp e) (set-union w1 (set-union w2 w3)))))
+
 ; -------------------------------------
 ; each wire is associated with a bitwidth (input wires will default to bitwidth of 1)
 (function bitwidth-wexp (MakiWexp) i64 :merge new :default 1) 
@@ -152,11 +152,11 @@
        (= (bitwidth-wexp e2) 1))
       ((set (bitwidth-wexp e) 2)))
 
-(rule ((= e (FullAdd e1 e2 e3))
-       (= (bitwidth-wexp e1) 1)
-       (= (bitwidth-wexp e2) 1)
-       (= (bitwidth-wexp e3) 1))
-      ((set (bitwidth-wexp e) 2)))
+; (rule ((= e (FullAdd e1 e2 e3))
+;        (= (bitwidth-wexp e1) 1)
+;        (= (bitwidth-wexp e2) 1)
+;        (= (bitwidth-wexp e3) 1))
+;       ((set (bitwidth-wexp e) 2)))
 
 (rule ((= e (NBitAdd e1 e2 e3))
        (= (bitwidth-wexp e1) n)
@@ -170,12 +170,12 @@
        (!= (bitwidth-wexp e3) 1))
       ((panic "ERROR: carry-in wires to adder should be 1 bit in width")))
 
-(rule ((= e (FullAdd e1 e2 e3))
-       (!= (bitwidth-wexp e3) 1))
-      ((panic "ERROR: carry-in wires to adder should be 1 bit in width")))
+; (rule ((= e (FullAdd e1 e2 e3))
+;        (!= (bitwidth-wexp e3) 1))
+;       ((panic "ERROR: carry-in wires to adder should be 1 bit in width")))
 ;--------------------------------------------------------------------
 
-; --- TODO: rules to create intermediate wires ---
+; --- POTENTIAL: rules to create intermediate wires ---
 ; idea: if we count the number of repeated netlist elements in the original, set a counter
 ; if the counter reaches a user-defined value, create a new WireType and associate it
 ; with that wire expression via the evals-to function.
@@ -186,6 +186,7 @@
 ; TODO: in the final tool, do (print bitwidth-wire) and parse its output
 ; TODO: in the final tool, set our input and output wires
 (function evals-to (WireType) MakiWexp :cost 10000)
+(sort Wires (Set MakiWexp))
 
 ; update bitwidths for intermediate wire variables
 (rule ((= (evals-to name) wexp)
@@ -260,38 +261,42 @@
 ; ----------------------------------------
 ; AddSum, AddCarry
 (function ripple-carry (String) MakiWexp :cost 10000)
-;(function )
+
+; TODO - make a set data type that stores MakiWexp types
+; question: do we have to name every wire
+; maki expression with 2 half add on the same wire, does it find 1 or does it find 2 
+; does egglog treat equivalent netlist elements as the same? (see if my method duplicates)
 
 ; half-add new
 (rewrite (And a b) (AddCarry a b (Wire Empty) 0))
 (rewrite (Xor a b) (AddSum a b (Wire Empty) 0))
-(rule ((= c (AddCarry a b (Wire Empty) 0)) (= sum (AddSum a b (Wire Empty) 0)))
-      ((let name (+ rcadder-name (to-str (i64-gen))))
+
+(rule ((= c (And a b)) (= sum (Xor a b)))
+      ((let name (+ rcadder-name "ha_" (to-str (i64-gen))))
        (set (i64-gen) -1)
        (set (ripple-carry name) (HalfAdd a b))))
 
-; full-add new
-(rewrite (Xor (AddSum a b (Wire Empty) 0) cin) (AddSum a b cin 0))
+; full-add
+(rewrite (Xor (Xor a b) cin) (AddSum a b cin 0))
 (rewrite (Or (Or (And a b) (And a cin)) (And b cin)) (AddCarry a b cin 0))
 (rewrite (Or (And a b) (And cin (Xor b a))) (AddCarry a b cin 0))
-(rule ((= c (AddCarry a b cin 0)) (= sum (AddSum a b cin 0)))
-      ((let name (+ rcadder-name (to-str (i64-gen))))
-       (set (i64-gen) -1) ; increment number tracker
-       (set (ripple-carry name) (FullAdd a b cin))))
 
-; comm-full-add
-(rewrite (FullAdd a b c) (FullAdd b a c))
 ; comm-nbit-add
 (rewrite (NBitAdd a b c) (NBitAdd b a c))
 
-; full-add to 2bit-add
-(FullAdd a1 b1 (Select (FullAdd a0 b0 cin) 1 1))
+; n-bit-add to n+1-bit-add
+(rewrite (Xor (Xor a2 b2) (AddCarry a b cin n)) (AddSum (Concat a2 a) (Concat b2 b) cin (+ n 1)))
+(rewrite (Or (Or (And a2 b2) (And a2 (AddCarry a b cin n))) (And b1 (AddCarry a b cin n))) (AddCarry (Concat a2 a) (Concat b2 b) cin (+ n 1)))
+(rewrite (Or (And a2 b2) (And (AddCarry a b cin n) (Xor b2 a2))) (AddCarry (Concat a2 a) (Concat b2 b) cin (+ n 1)))
 
-(rewrite (Xor (Xor a1 b1) (AddCarry a0 b0 cin 0)) (AddSum (Concat a1 a0) (Concat b1 b0) cin 1))
-(rewrite (Or (Or (And a1 b1) (And a1 (AddCarry a0 b0 cin 0))) (And b1 (AddCarry a0 b0 cin 0))) (AddCarry (Concat a1 a0) (Concat b1 b0) cin 1))
-(rewrite (Or (And a1 b1) (And (AddCarry a0 b0 cin 0) (Xor b1 a1))) (AddCarry (Concat a1 a0) (Concat b1 b0) cin 1))
-(rule ((= c (AddCarry a b cin 1)) (= sum (AddSum a b cin 1)))
-      ((let name (+ rcadder-name "nbit_" (to-str (i64-gen))))
+; TODO: make sure it is idempotent, or same name
+; 1. everything gets a unique name
+; 2. deduplicate identical structure within AST
+
+; TODO: make intermediate wires
+; TODO: make Jinja2 template
+(rule ((= c (AddCarry a b cin n)) (= sum (AddSum a b cin n)))
+      ((let name (+ rcadder-name (to-str (+ n 1)) "bit_" (to-str (i64-gen))))
        (set (i64-gen) -1)
        (set (ripple-carry name) (NBitAdd a b cin))))
 ; ----------------------------------------------

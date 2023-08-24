@@ -48,3 +48,49 @@
 (check (= (bitwidth-wexp a) 1))
 (check (= (bitwidth-wexp b) 2))
 (pop)
+
+; check circuit simplification bitwidth
+(push)
+(define a (Wire False))
+(define b (Wire True))
+(define c (And a b))
+(run 10)
+(extract c)
+(check (= (bitwidth-wexp c) 1))
+(pop)
+
+(push)
+; test exponential runtime of non adder circuits
+(define generic-circuit
+      (And (And (Wire (W "a")) (Wire (W "b"))) (Or (Wire (W "b")) (Wire (W "c")))))
+
+(define generic-circuit-2
+      (And (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0"))))) (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin")))))
+(run 7)
+(extract generic-circuit)
+(extract generic-circuit-2)
+(extract (wires-in-wexp generic-circuit))
+(extract (wires-in-wexp generic-circuit-2))
+; (print wires-in-wexp)
+(pop)
+
+; test full-add
+(push)
+(define add-sum (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin"))))
+(define one-bit-add
+    (Concat (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0"))))) (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin"))))
+)
+(run 10)
+(extract (bitwidth-wexp one-bit-add))
+; (extract (bitwidth-wexp (Wire (W "b0"))))
+; (extract (bitwidth-wire (W "b0")))
+(extract add-sum)
+(check (= add-sum (AddSum (Wire (W "a0")) (Wire (W "b0")) (Wire (W "cin")) 0)))
+(check (= add-sum (AddSum (Wire (W "cin")) (Wire (W "b0")) (Wire (W "a0")) 0)))
+(extract one-bit-add)
+(print ripple-carry 10000)
+(pop)
+
+; test 2-bit-add
+(push)
+(pop)
