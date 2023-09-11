@@ -1,0 +1,14 @@
+(include "../tool/maki_decomp.egg")
+
+; test half-add
+(push)
+(define half-add
+    (Concat (And (Wire (W "a0")) (Wire (W "b0"))) (Xor (Wire (W "a0")) (Wire (W "b0"))))
+)
+(run 10)
+(extract (bitwidth-wexp half-add))
+(extract half-add)
+(print ripple-carry 10)
+(print bitwidth-wexp 10)
+(print evals-to 10)
+(pop)

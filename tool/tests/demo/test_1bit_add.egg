@@ -1,0 +1,14 @@
+(include "../tool/maki_decomp.egg")
+
+; test full-add
+(push)
+(define one-bit-add
+    (Concat (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0"))))) (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin"))))
+)
+(run 10)
+(extract (bitwidth-wexp one-bit-add))
+
+(extract one-bit-add)
+(print ripple-carry 1000) ; inevitable duplicates will be present
+(print bitwidth-wexp 100) ; this will be populated very fast
+(pop)

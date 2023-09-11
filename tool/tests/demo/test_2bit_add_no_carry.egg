@@ -1,0 +1,20 @@
+(include "../tool/maki_decomp.egg")
+
+; test 2bit-add no carry out 
+; NOTE INTERESTING BEHAVIOR
+(push)
+(define two-bit-add-no-carry
+    (Concat (Xor (Xor (Wire (W "a1")) (Wire (W "b1"))) (Or (And (Wire (W "a0")) (Wire (W "b0"))) (And (Wire (W "cin")) (Xor (Wire (W "a0")) (Wire (W "b0")))))) ; 1st bit of sum
+            (Xor (Xor (Wire (W "a0")) (Wire (W "b0"))) (Wire (W "cin")))) ; 0th bit of sum)
+)
+(run 10)
+(extract two-bit-add-no-carry)
+(extract (bitwidth-wexp two-bit-add-no-carry))
+(print ripple-carry 10000)
+
+; test equivalence with "desired output"
+(define desired
+    (Concat (AddSum (Concat (Wire (W "b1")) (Wire (W "b0"))) (Concat (Wire (W "a1")) (Wire (W "a0"))) (Wire (W "cin")) 1) (AddSum (Wire (W "a0")) (Wire (W "b0")) (Wire (W "cin")) 0))
+)
+(check (= two-bit-add-no-carry desired))
+(pop)

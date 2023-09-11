@@ -1,0 +1,63 @@
+(include "../tool/maki_decomp.egg")
+
+; ---- TEST CODE BELOW ----
+(push)
+(Wire (W "joe"))
+(define a (And (Wire (W "bob")) (Wire False)))
+(define b (Wire True))
+(define c (And (Wire (W "bob")) (Wire True)))
+(define d (Concat (Wire (W "bob")) (Wire (W "joe"))))
+(run 10)
+
+; check wires default to bitwidth 1
+(check (= (bitwidth-wexp (Wire (W "bob"))) (bitwidth-wexp (Wire (W "joe")))))
+(check (= (bitwidth-wire (W "bob")) (bitwidth-wire (W "joe"))))
+(extract (bitwidth-wexp d))
+(extract a) ; (Const 0 1)
+(extract b) ; (Const 1 1)
+(extract c) ; (Wire (W "bob")) 
+(pop)
+
+; check default wires evaluate to bitwidth 1
+(push)
+(define a (Wire False))
+(define b (Wire Empty))
+(run 10)
+(check (= (bitwidth-wexp a) 1))
+(check (= (bitwidth-wexp b) 1))
+(pop)
+
+; check constant wires evaluate properly in wires-in-wexp
+(push)
+(Const 10 34)
+(Const 20 324)
+(run 10)
+(check (= (bitwidth-wexp (Const 10 34)) 34))
+(check (= (bitwidth-wexp (Const 20 324)) 324))
+(pop)
+
+; check equivalence between CONST wires and Wire TRUE and Wire FALSE
+(push)
+(define a (Wire False))
+(define b (Concat a (And (Wire (W "b")) (Wire (W "c")))))
+(run 10)
+(check (= (Wire False) (Const 0 1)))
+(check (= a (Const 0 1)))
+(check (= (bitwidth-wexp a) 1))
+(check (= (bitwidth-wexp b) 2))
+(pop)
+
+; test egraph state explosion -- happens for any type of circuit
+(push)
+(define generic-circuit
+      (And (And (Wire (W "a")) (Wire (W "b"))) (Or (Wire (W "b")) (Wire (W "c")))))
+
+(define generic-circuit-2
+      (And (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0"))))) (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin")))))
+; (run 15)
+(run 7)
+(extract generic-circuit)
+(extract generic-circuit-2)
+(extract (wires-in-wexp generic-circuit))
+(extract (wires-in-wexp generic-circuit-2))
+(pop)

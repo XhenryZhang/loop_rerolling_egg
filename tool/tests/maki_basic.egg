@@ -82,8 +82,6 @@
 )
 (run 10)
 (extract (bitwidth-wexp one-bit-add))
-; (extract (bitwidth-wexp (Wire (W "b0"))))
-; (extract (bitwidth-wire (W "b0")))
 (extract add-sum)
 (check (= add-sum (AddSum (Wire (W "a0")) (Wire (W "b0")) (Wire (W "cin")) 0)))
 (check (= add-sum (AddSum (Wire (W "cin")) (Wire (W "b0")) (Wire (W "a0")) 0)))
@@ -104,7 +102,7 @@
 (extract (bitwidth-wexp two-bit-add))
 (extract two-bit-add)
 ;(extract (dedup-adder "default"))
-(print ripple-carry 1000) ; CAVEAT: lacking feature to print ALL of a function, must manually specify amount of information to print
+(print ripple-carry 100) ; CAVEAT: lacking feature to print ALL of a function, must manually specify amount of information to print
 ; however, we are only printing out the information, we have access to the entire function if we apply future rewrite rules
 
 ; test equivalence with "desired" output
@@ -114,21 +112,29 @@
 (check (= two-bit-add desired))
 (pop)
 
-; test 2bit-add no carry out
+; test 2bit-add no carry out 
+; NOTE INTERESTING BEHAVIOR
 (push)
 (define two-bit-add-no-carry
-    (Concat (Xor (Xor (Wire (W "b1")) (Wire (W "a1"))) (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0")))))) ; 1st bit of sum
-            (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin")))) ; 0th bit of sum)
+    (Concat (Xor (Xor (Wire (W "a1")) (Wire (W "b1"))) (Or (And (Wire (W "a0")) (Wire (W "b0"))) (And (Wire (W "cin")) (Xor (Wire (W "a0")) (Wire (W "b0")))))) ; 1st bit of sum
+            (Xor (Xor (Wire (W "a0")) (Wire (W "b0"))) (Wire (W "cin")))) ; 0th bit of sum)
 )
 (run 10)
 (extract two-bit-add-no-carry)
 (extract (bitwidth-wexp two-bit-add-no-carry))
+(print ripple-carry 100)
+
+; test equivalence with "desired output"
+(define desired
+    (Concat (AddSum (Concat (Wire (W "b1")) (Wire (W "b0"))) (Concat (Wire (W "a1")) (Wire (W "a0"))) (Wire (W "cin")) 1) (AddSum (Wire (W "a0")) (Wire (W "b0")) (Wire (W "cin")) 0))
+)
+(check (= two-bit-add-no-carry desired))
 (pop)
 
 ; test 3-bit-add
 (push)
 (pop)
 
-; test circuit
+; test circuit boi
 (push)
 (pop)

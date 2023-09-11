@@ -15,19 +15,21 @@
 ; True/False is a WireType with undefined input that evaluates to a unique canonical Id
 (declare True WireType)
 (declare False WireType)
-(declare Empty WireType)
+(declare Empty WireType) ; unused for now
 
 (datatype MakiWexp
     (Wire WireType :cost 1)
     ; SEMANTICS - (Const <value> <bitwidth>)
     (Const i64 i64 :cost 1)
     (HalfAdd MakiWexp MakiWexp :cost 1)
-    (NBitAdd MakiWexp MakiWexp MakiWexp :cost 1)
-    (And MakiWexp MakiWexp :cost 1)
-    (Or MakiWexp MakiWexp :cost 2)
-    (Not MakiWexp :cost 2)
-    (Xor MakiWexp MakiWexp :cost 2)
-    ; SEMANTICS - Concats the two Wexps, where most signficant bit is the most significant bit of the first MakiWexp argument
+    (NBitAdd MakiWexp MakiWexp MakiWexp :cost 1) ; nbit add with last carry bit
+    (NBitAddNoCarry MakiWexp MakiWexp MakiWexp :cost 1) ; nbit add without last carry bit
+    (And MakiWexp MakiWexp :cost 3)
+    (Or MakiWexp MakiWexp :cost 3)
+    (Not MakiWexp :cost 3)
+    (Xor MakiWexp MakiWexp :cost 3)
+    ; SEMANTICS - Concats the two Wexps, where most signficant bit is
+    ; the most significant bit of the first MakiWexp argument
     (Concat MakiWexp MakiWexp :cost 1)
     ; SEMANTICS - (Select <least sig bit> <most sig bit>) - inclusive
     (Select MakiWexp i64 i64 :cost 1)
@@ -37,7 +39,7 @@
     (AddCarry MakiWexp MakiWexp MakiWexp i64 :cost 1)
 )
 
-; Tentative: wires-in-wexp will initially contain all the input wires to the circuit
+; wires-in-wexp will initially contain all the input wires to the circuit
 ; After rewriting, Wires should change to include wires (including intermediate wires)
 ; that will be present as WireVectors in the decompiled Python program. 
 (sort Wires (Set WireType))
@@ -84,6 +86,12 @@
       ((set (wires-in-wexp e) (set-union w1 w2))))
 
 (rule ((= e (NBitAdd e1 e2 e3))
+       (= (wires-in-wexp e1) w1)
+       (= (wires-in-wexp e2) w2)
+       (= (wires-in-wexp e3) w3))
+      ((set (wires-in-wexp e) (set-union w1 (set-union w2 w3)))))
+
+(rule ((= e (NBitAddNoCarry e1 e2 e3))
        (= (wires-in-wexp e1) w1)
        (= (wires-in-wexp e2) w2)
        (= (wires-in-wexp e3) w3))
@@ -152,15 +160,21 @@
        (= (bitwidth-wexp e3) 1))
       ((set (bitwidth-wexp e) (+ n 1))))
 
+(rule ((= e (NBitAddNoCarry e1 e2 e3))
+       (= (bitwidth-wexp e1) n)
+       (= (bitwidth-wexp e2) n)
+       (= (bitwidth-wexp e3) 1))
+      ((set (bitwidth-wexp e) n)))
+
 ; check carry-in bits are 1 bit
 ; the Empty wire is also one bit, but it represents 0 wire
 (rule ((= e (NBitAdd e1 e2 e3))
        (!= (bitwidth-wexp e3) 1))
       ((panic "ERROR: carry-in wires to adder should be 1 bit in width")))
 
-; (rule ((= e (FullAdd e1 e2 e3))
-;        (!= (bitwidth-wexp e3) 1))
-;       ((panic "ERROR: carry-in wires to adder should be 1 bit in width")))
+(rule ((= e (NBitAddNoCarry e1 e2 e3))
+       (!= (bitwidth-wexp e3) 1))
+      ((panic "ERROR: carry-in wires to adder should be 1 bit in width")))
 ;--------------------------------------------------------------------
 
 ; --- POTENTIAL: rules to create intermediate wires ---
@@ -252,7 +266,7 @@
 (function ripple-carry (String) MakiWexp :cost 100000)
 (sort Adders (Set MakiWexp)) ; TODO: deduplicate adders, since rewrite rules will be triggered each cycle
 (function dedup-adder (String) Adders :merge (set-union old new))
-(set (dedup-adder "default") (set-of (Wire (W "placeholder")))) ; hacky method since we can't make an empty set -- implicitly types to WireType since empty set binds to the first custom sort encountered
+(set (dedup-adder "default") (set-of (Wire (W "ignorethis")))) ; hacky method since we can't make an empty set -- implicitly types to WireType since empty set binds to the first custom sort encountered
 
 ; TODO - make a set data type that stores MakiWexp types
 ; question: do we have to name every wire
@@ -260,46 +274,91 @@
 ; does egglog treat equivalent netlist elements as the same? (see if my method duplicates)
 
 ; comm sum and carry bits
-; (rewrite (AddSum a b cin n) (AddSum b a cin n))
-; (rewrite (AddCarry a b cin n) (AddCarry b a cin n))
+(rewrite (AddSum a b cin n) (AddSum b a cin n))
+(rewrite (AddCarry a b cin n) (AddCarry b a cin n))
 
 ; half-add new
-(rewrite (And a b) (AddCarry a b (Wire Empty) 0))
-(rewrite (Xor a b) (AddSum a b (Wire Empty) 0))
+; (rewrite (And a b) (AddCarry a b (Wire Empty) 0))
+; (rewrite (Xor a b) (AddSum a b (Wire Empty) 0))
 
 ; OPTIMIZE: this hacky approach reduces the number of duplicate statements, but not completely if there are
 ; multiple (And) structures appear in the same tree structure
-(rule ((= (And a b) c) (= (Xor a b) sum) (set-not-contains (dedup-adder "default") c))
+
+(rule ((= (And a b) c) (= (Xor a b) sum))
       ((let name (+ rcadder-name "ha_" (to-str (i64-gen))))
        (set (i64-gen) -1)
-       (set (dedup-adder "default") (set-of c))
        (set (ripple-carry name) (HalfAdd a b))))
 
 ; nbit-add
 (rewrite (Xor (Xor a b) cin) (AddSum a b cin 0))
 (rewrite (Or (Or (And a b) (And a cin)) (And b cin)) (AddCarry a b cin 0))
-(rewrite (Or (And a b) (And cin (Xor b a))) (AddCarry a b cin 0))
+(rewrite (Or (And a b) (And cin (Xor a b))) (AddCarry a b cin 0))
 
 ; comm-adds
 ; (rewrite (HalfAdd a b) (HalfAdd b a))
 ; (rewrite (NBitAdd a b c) (NBitAdd b a c))
 
-; n-bit-add to n+1-bit-add, TODO: intermediate wires!!!
-(rewrite (Xor (Xor a2 b2) (AddCarry a b cin n)) (AddSum (Concat a2 a) (Concat b2 b) cin (+ n 1)))
-(rewrite (Or (Or (And a2 b2) (And a2 (AddCarry a b cin n))) (And b1 (AddCarry a b cin n))) (AddCarry (Concat a2 a) (Concat b2 b) cin (+ n 1)))
-(rewrite (Or (And a2 b2) (And (AddCarry a b cin n) (Xor b2 a2))) (AddCarry (Concat a2 a) (Concat b2 b) cin (+ n 1)))
+; n-bit-add to n+1-bit-add
+; (rule ((= (Xor (Xor a2 b2) (AddCarry a b cin n)) as))
+;       ((let op1 (Concat a2 a))
+;        (let op2 (Concat b2 b))
+;        (let name1 (+ wname "addend1_" (to-str (i64-gen))))
+;        (let name2 (+ wname "addend2_" (to-str (i64-gen))))
+;        (set (i64-gen) -1) ; increment number tracker
+;        (set (evals-to (W name1)) op1)
+;        (set (evals-to (W name2)) op2)
+;        (union as (AddSum (Wire (W name1)) (Wire (W name2)) cin (+ n 1)))))
+
+; (rule ((= (Or (Or (And a2 b2) (And a2 (AddCarry a b cin n))) (And b1 (AddCarry a b cin n))) ac))
+;       ((let op1 (Concat a2 a))
+;        (let op2 (Concat b2 b))
+;        (let name1 (+ wname "addend1_" (to-str (i64-gen))))
+;        (let name2 (+ wname "addend2_" (to-str (i64-gen))))
+;        (set (i64-gen) -1)
+;        (set (evals-to (W name1)) op1)
+;        (set (evals-to (W name2)) op2)
+;        (union ac (AddCarry (Wire (W name1)) (Wire (W name2)) cin (+ n 1)))))
+
+; (rule ((= (Or (And a2 b2) (And (AddCarry a b cin n) (Xor b2 a2))) ac))
+;       ((let op1 (Concat a2 a))
+;        (let op2 (Concat b2 b))
+;        (let name1 (+ wname "addend1_" (to-str (i64-gen))))
+;        (let name2 (+ wname "addend2_" (to-str (i64-gen))))
+;        (set (i64-gen) -1)
+;        (set (evals-to (W name1)) op1)
+;        (set (evals-to (W name2)) op2)
+;        (union ac (AddCarry (Wire (W name1)) (Wire (W name2)) cin (+ n 1)))))
+
+(rewrite (Or (Or (And a2 b2) (And a2 (AddCarry a b cin n))) (And b1 (AddCarry a b cin n)))
+         (AddCarry (Concat a2 a) (Concat b2 b) cin (+ n 1)))
+(rewrite (Or (And a2 b2) (And (AddCarry a b cin n) (Xor b2 a2))) 
+         (AddCarry (Concat a2 a) (Concat b2 b) cin (+ n 1)))
+(rewrite (Xor (Xor a2 b2) (AddCarry a b cin n)) 
+         (AddSum (Concat a2 a) (Concat b2 b) cin (+ n 1)))
 
 ; TODO: make sure it is idempotent, or same name
 ; 1. everything gets a unique name
 ; 2. deduplicate identical structure within AST
 
+; nbitadd with carry bit
 (rule ((= c (AddCarry a b cin n)) (= sum (AddSum a b cin n)))
       ((let name (+ rcadder-name (to-str (+ n 1)) "bit_" (to-str (i64-gen))))
        (set (i64-gen) -1)
-       (set (dedup-adder "default") (set-of c))
        (set (ripple-carry name) (NBitAdd a b cin))))
 
+       
+       ;(set (dedup-adder "default") (set-of c))))
+
+; nbitadd without carry bit
+(rule ((= sum (AddSum a b cin n)) (set-not-contains (dedup-adder "default") sum))
+      ((let name (+ rcadder-name (to-str (+ n 1)) "bit_" (to-str (i64-gen))))
+       (set (i64-gen) -1)
+       (set (ripple-carry name) (NBitAddNoCarry a b cin))))
+       ; (set (dedup-adder "default") (set-of sum))))
+
+; Add it in tests:
 ; (Concat (Concat (AddCarry (Concat (Wire (W "a1")) (Wire (W "a0"))) (Concat (Wire (W "b1")) (Wire (W "cin"))) (Wire (W "b0")) 1) (AddSum (Concat (Wire (W "a1")) (Wire (W "a0"))) (Concat (Wire (W "b1")) (Wire (W "cin"))) (Wire (W "b0")) 1)) (AddSum (Wire (W "b0")) (Wire (W "a0")) (Wire (W "cin")) 0))
+
 ; ----------------------------------------------
 ; half-add
 ; (rewrite (Concat (And a b) (Xor a b)) (HalfAdd a b))
