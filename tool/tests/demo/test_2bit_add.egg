@@ -1,21 +1,36 @@
 (include "../tool/maki_decomp.egg")
 
 ; test 2 bit add
+; DEFINE MAKIWEXPs
 (push)
 (define two-bit-add
-    (Concat (Concat (Or (And (Wire (W "b1")) (Wire (W "a1"))) (And (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0"))))) (Xor (Wire (W "b1")) (Wire (W "a1"))))) ; carry out
+    (Concat (Concat (Or (And (Wire (W "b1")) (Wire (W "a1")))
+                        (And (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0")))))
+                        (Xor (Wire (W "b1")) (Wire (W "a1"))))) ; carry out
             (Xor (Xor (Wire (W "b1")) (Wire (W "a1"))) (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0"))))))) ; 1st bit of sum
             (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin")))) ; 0th bit of sum
 )
+
+; run Egglog rules and rewrites
 (run 10)
+
+; GET BITWIDTH FROM GLOBAL INFORMATION POOL
 (extract (bitwidth-wexp two-bit-add))
+
+; GET OPTIMAL REPRESENTATION OF NETLIST
 (extract two-bit-add)
-(print ripple-carry 10000) ; CAVEAT: lacking feature to print ALL of a function, must manually specify amount of information to print
+
+; PRINT GLOBAL INFORMATION FOR DETECTED ADDERS
+(print ripple-carry 100) ; CAVEAT: lacking feature to print ALL of a function, must manually specify amount of information to print
 ; however, we are only printing out the information, we have access to the entire function if we apply future rewrite rules
 
 ; test equivalence with "desired" output
 (define desired
-    (Concat (Concat (AddCarry (Concat (Wire (W "a1")) (Wire (W "a0"))) (Concat (Wire (W "b1")) (Wire (W "b0"))) (Wire (W "cin")) 1) (AddSum (Concat (Wire (W "a1")) (Wire (W "a0"))) (Concat (Wire (W "b1")) (Wire (W "b0"))) (Wire (W "cin")) 1)) (AddSum (Wire (W "b0")) (Wire (W "a0")) (Wire (W "cin")) 0))
+    (Concat (Concat (AddCarry (Concat (Wire (W "a1")) (Wire (W "a0"))) (Concat (Wire (W "b1")) (Wire (W "b0"))) (Wire (W "cin")) 1)
+                    (AddSum (Concat (Wire (W "a1")) (Wire (W "a0"))) (Concat (Wire (W "b1")) (Wire (W "b0"))) (Wire (W "cin")) 1))
+                    (AddSum (Wire (W "b0")) (Wire (W "a0")) (Wire (W "cin")) 0))
 )
 (check (= two-bit-add desired))
 (pop)
+
+

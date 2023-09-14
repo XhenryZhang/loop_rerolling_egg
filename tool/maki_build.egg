@@ -1,3 +1,4 @@
+; correspond to test file maki_build.egg
 ; W is a function that maps "string" to canonical id for WireType
 (datatype WireType
     (W String))

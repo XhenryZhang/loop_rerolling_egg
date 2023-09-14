@@ -5,38 +5,46 @@
 ; immediate wire name
 (define wname "w_")
 
-; ripple carry adder name
+; ripple carry adder name w/ carry bit
+(define rcadder-name-no-carry "rcc_")
+
+; ripple carry adder name w/o carry bit
 (define rcadder-name "rc_")
 
-; W is a function that maps "string" to canonical id for WireType
+; W is a function that maps "string" (wire name) to canonical id for WireType
 (datatype WireType
-    (W String))
+      (W String))
 
 ; True/False is a WireType with undefined input that evaluates to a unique canonical Id
 (declare True WireType)
 (declare False WireType)
-(declare Empty WireType) ; unused for now
+(declare Empty WireType)
 
 (datatype MakiWexp
-    (Wire WireType :cost 1)
-    ; SEMANTICS - (Const <value> <bitwidth>)
-    (Const i64 i64 :cost 1)
-    (HalfAdd MakiWexp MakiWexp :cost 1)
-    (NBitAdd MakiWexp MakiWexp MakiWexp :cost 1) ; nbit add with last carry bit
-    (NBitAddNoCarry MakiWexp MakiWexp MakiWexp :cost 1) ; nbit add without last carry bit
-    (And MakiWexp MakiWexp :cost 3)
-    (Or MakiWexp MakiWexp :cost 3)
-    (Not MakiWexp :cost 3)
-    (Xor MakiWexp MakiWexp :cost 3)
-    ; SEMANTICS - Concats the two Wexps, where most signficant bit is
-    ; the most significant bit of the first MakiWexp argument
-    (Concat MakiWexp MakiWexp :cost 1)
-    ; SEMANTICS - (Select <least sig bit> <most sig bit>) - inclusive
-    (Select MakiWexp i64 i64 :cost 1)
-    ; SEMANTICS - (AddSum <addend A> <addend B> <carry-in> <ith bit>)
-    (AddSum MakiWexp MakiWexp MakiWexp i64 :cost 1)
-    ; SEMANTICS - (AddCarry <addend A> <addend B> <carry-in> <ith bit>)
-    (AddCarry MakiWexp MakiWexp MakiWexp i64 :cost 1)
+      ; ------ netlist circuit components ------
+      (Wire WireType :cost 1)
+      ; SEMANTICS - (Const <value> <bitwidtrh>)
+      (Const i64 i64 :cost 1)
+      (And MakiWexp MakiWexp :cost 3)
+      (Or MakiWexp MakiWexp :cost 3)
+      (Not MakiWexp :cost 3)
+      (Xor MakiWexp MakiWexp :cost 3)
+      ; SEMANTICS - Concats the two Wexps, where most signficant bit is
+      ; the most significant bit of the first MakiWexp argument
+      (Concat MakiWexp MakiWexp :cost 1)
+      ; SEMANTICS - (Select <least sig bit> <most sig bit>) - inclusive
+      (Select MakiWexp i64 i64 :cost 1)
+      ; SEMANTICS - (AddSum <addend A> <addend B> <carry-in> <ith bit>)
+      
+      ; ------ high-level circuit components ------
+      (AddSum MakiWexp MakiWexp MakiWexp i64 :cost 1)
+      ; SEMANTICS - (AddCarry <addend A> <addend B> <carry-in> <ith bit>)
+      (AddCarry MakiWexp MakiWexp MakiWexp i64 :cost 1)
+
+      ; ------ high-level global information ------
+      (HalfAdd MakiWexp MakiWexp)
+      (NBitAdd MakiWexp MakiWexp MakiWexp)
+      (NBitAddNoCarry MakiWexp MakiWexp MakiWexp)
 )
 
 ; wires-in-wexp will initially contain all the input wires to the circuit
@@ -177,16 +185,19 @@
       ((panic "ERROR: carry-in wires to adder should be 1 bit in width")))
 ;--------------------------------------------------------------------
 
-; --- POTENTIAL: rules to create intermediate wires ---
+; --- TODO: rules to create intermediate wires ------
 ; idea: if we count the number of repeated netlist elements in the original, set a counter
 ; if the counter reaches a user-defined value, create a new WireType and associate it
-; with that wire expression via the evals-to function.
-; ------------------------------------------
+; with that wire expression via the evals-to function
+; ---------------------------------------------------
+
+; --- TODO: rules to create intermediate rewrites ---
+; in the final tool, do (print evals-to) and parse its output
+; in the final tool, do (print bitwidth-wire) and parse its output
+; in the final tool, do (print ripple-carry) and parse its output
+; ---------------------------------------------------
 
 ; associate intermediate (non-input) wires with the MakiWexp they represent
-; TODO: in the final tool, do (print evals-to) and parse its output
-; TODO: in the final tool, do (print bitwidth-wire) and parse its output
-; TODO: in the final tool, set our input and output wires
 (function evals-to (WireType) MakiWexp :cost 10000)
 
 ; update bitwidths for intermediate wire variables
@@ -194,8 +205,8 @@
        (= (bitwidth-wexp wexp) w))
       ((set (bitwidth-wire name) w)))
 
-; --- rewrite rules ---
-(ruleset rewrite-rules)
+; --- saturating rewrite rules ---
+(ruleset sat-rewrite-rules)
 ; comm-and
 (rewrite (And a b) (And b a))
 ; assoc-and
@@ -243,9 +254,6 @@
 ; TRUE/FALSE
 (rewrite (Wire False) (Const 0 1))
 (rewrite (Wire True) (Const 1 1))
-; ---------------------------------------
-
-; ----- bidirectional rewrite rules -----
 ; xor-conv
 (rewrite (Xor a b) (And (Or a b) (Not (And a b))))
 ; xor-conv2
@@ -264,42 +272,90 @@
 
 ; This function maps generated names to ripple-carry adders present in the circuit
 (function ripple-carry (String) MakiWexp :cost 100000)
-(sort Adders (Set MakiWexp)) ; TODO: deduplicate adders, since rewrite rules will be triggered each cycle
-(function dedup-adder (String) Adders :merge (set-union old new))
-(set (dedup-adder "default") (set-of (Wire (W "ignorethis")))) ; hacky method since we can't make an empty set -- implicitly types to WireType since empty set binds to the first custom sort encountered
 
-; TODO - make a set data type that stores MakiWexp types
-; question: do we have to name every wire
-; maki expression with 2 half add on the same wire, does it find 1 or does it find 2 
-; does egglog treat equivalent netlist elements as the same? (see if my method duplicates)
+; identify 0th sum bit of a ripple carry adder
+(rewrite (Xor (Xor a b) cin) (AddSum a b cin 0))
+(rewrite (Xor a b) (AddSum a b (Wire Empty) 0))
+
+; identify 0th carry bit of a ripple carry adder
+(rewrite (And a b) (AddCarry a b (Wire Empty) 0))
+(rewrite (Or (Or (And a b) (And a cin)) (And b cin)) (AddCarry a b cin 0))
+(rewrite (Or (And a b) (And cin (Xor a b))) (AddCarry a b cin 0))
+
+; identify n+1th sum bit of a ripple carry adder
+(rewrite (Xor (Xor a2 b2) (AddCarry a b cin n)) 
+         (AddSum (Concat a2 a) (Concat b2 b) cin (+ n 1)))
+
+; identify n+1th carry bit of a ripple carry adder
+(rewrite (Or (Or (And a2 b2) (And a2 (AddCarry a b cin n))) (And b1 (AddCarry a b cin n)))
+         (AddCarry (Concat a2 a) (Concat b2 b) cin (+ n 1)))
+(rewrite (Or (And a2 b2) (And (AddCarry a b cin n) (Xor b2 a2))) 
+         (AddCarry (Concat a2 a) (Concat b2 b) cin (+ n 1)))
 
 ; comm sum and carry bits
 (rewrite (AddSum a b cin n) (AddSum b a cin n))
 (rewrite (AddCarry a b cin n) (AddCarry b a cin n))
 
-; half-add new
-; (rewrite (And a b) (AddCarry a b (Wire Empty) 0))
-; (rewrite (Xor a b) (AddSum a b (Wire Empty) 0))
+; --- [FAILED ATTEMPT]: deduplicate adders, since the same additive rules will be triggered each cycle ---
+; Motivation - make a set data type that stores MakiWexp types
+; question: do we have to name every wire uniquely, to prevent duplication, or is another 
+; maki expression with 2 half add on the same wire, does it find 1 or does it find 2 
+; does egglog treat equivalent netlist elements as the same? NO
 
 ; OPTIMIZE: this hacky approach reduces the number of duplicate statements, but not completely if there are
 ; multiple (And) structures appear in the same tree structure
 
+; (sort AdderSet (Set MakiWexp)) 
+; (function dedup-adder (String) AdderSet :merge (set-union old new))
+; (set (dedup-adder "default") (set-of (Wire (W "ignorethis")))) ; hacky method since we can't make an empty set -- implicitly types to WireType since empty set binds to the first custom sort encountered   
+
+; (rule ((= (And a b) c) (= (Xor a b) sum) (set-not-contains (dedup-adder "default") sum))
+;       ((let name (+ rcadder-name "ha_" (to-str (i64-gen))))
+;        (set (i64-gen) -1)
+;        (set (ripple-carry name) (HalfAdd a b))
+;        (set (dedup-adder "default") (set-of sum))))
+
+; (rule ((= c (AddCarry a b cin n)) (= sum (AddSum a b cin n)) (set-not-contains (dedup-adder "default") c))
+;       ((let name (+ rcadder-name (to-str (+ n 1)) "bit_" (to-str (i64-gen))))
+;        (set (i64-gen) -1)
+;        (set (ripple-carry name) (NBitAdd a b cin))
+;        (set (dedup-adder "default") (set-of c))))
+
+; (rule ((= sum (AddSum a b cin n)) (set-not-contains (dedup-adder "default") sum))
+;       ((let name (+ rcadder-name-no-carry (to-str (+ n 1)) "bit_" (to-str (i64-gen))))
+;        (set (i64-gen) -1)
+;        (set (ripple-carry name) (NBitAddNoCarry a b cin))
+;        (set (dedup-adder "default") (set-of sum))))
+; ---------------------------------------------------------------------------------------------------------
+
+; ------- WORKING -------
+; halfadd (with carry-out bit) -- w/o carry bit is just XOR gate
 (rule ((= (And a b) c) (= (Xor a b) sum))
       ((let name (+ rcadder-name "ha_" (to-str (i64-gen))))
        (set (i64-gen) -1)
        (set (ripple-carry name) (HalfAdd a b))))
 
-; nbit-add
-(rewrite (Xor (Xor a b) cin) (AddSum a b cin 0))
-(rewrite (Or (Or (And a b) (And a cin)) (And b cin)) (AddCarry a b cin 0))
-(rewrite (Or (And a b) (And cin (Xor a b))) (AddCarry a b cin 0))
+; nbitadd with carry-in bit with carry-out bit
+(rule ((= c (AddCarry a b cin n)) (= sum (AddSum a b cin n)))
+      ((set (i64-gen) -1)
+       (let name (+ rcadder-name (to-str (+ n 1)) "bit_" (to-str (i64-gen))))
+       (set (ripple-carry name) (NBitAdd a b cin))))
 
-; comm-adds
-; (rewrite (HalfAdd a b) (HalfAdd b a))
-; (rewrite (NBitAdd a b c) (NBitAdd b a c))
+; nbitadd with carry-in bit without carry-out bit
+(rule ((= sum (AddSum a b cin n)))
+      ((set (i64-gen) -1)
+       (let name (+ rcadder-name-no-carry (to-str (+ n 1)) "bit_" (to-str (i64-gen))))
+       (set (ripple-carry name) (NBitAddNoCarry a b cin))))
+
+; nbitadd without carry-in bit with carry-out bit
+;(rule ((=)))
+
+; nbitadd without carry-in bit without carry-out bit
+;()
+;-------------------------
 
 ; n-bit-add to n+1-bit-add
-; (rule ((= (Xor (Xor a2 b2) (AddCarry a b cin n)) as))
+; (rule ((= (Xor (Xor a2 b2) (AddCarry a b cin n)) sum))
 ;       ((let op1 (Concat a2 a))
 ;        (let op2 (Concat b2 b))
 ;        (let name1 (+ wname "addend1_" (to-str (i64-gen))))
@@ -307,9 +363,9 @@
 ;        (set (i64-gen) -1) ; increment number tracker
 ;        (set (evals-to (W name1)) op1)
 ;        (set (evals-to (W name2)) op2)
-;        (union as (AddSum (Wire (W name1)) (Wire (W name2)) cin (+ n 1)))))
+;        (union sum (AddSum (Wire (W name1)) (Wire (W name2)) cin (+ n 1)))))
 
-; (rule ((= (Or (Or (And a2 b2) (And a2 (AddCarry a b cin n))) (And b1 (AddCarry a b cin n))) ac))
+; (rule ((= (Or (Or (And a2 b2) (And a2 (AddCarry a b cin n))) (And b1 (AddCarry a b cin n))) carry))
 ;       ((let op1 (Concat a2 a))
 ;        (let op2 (Concat b2 b))
 ;        (let name1 (+ wname "addend1_" (to-str (i64-gen))))
@@ -317,7 +373,7 @@
 ;        (set (i64-gen) -1)
 ;        (set (evals-to (W name1)) op1)
 ;        (set (evals-to (W name2)) op2)
-;        (union ac (AddCarry (Wire (W name1)) (Wire (W name2)) cin (+ n 1)))))
+;        (union carry (AddCarry (Wire (W name1)) (Wire (W name2)) cin (+ n 1)))))
 
 ; (rule ((= (Or (And a2 b2) (And (AddCarry a b cin n) (Xor b2 a2))) ac))
 ;       ((let op1 (Concat a2 a))
@@ -328,38 +384,11 @@
 ;        (set (evals-to (W name1)) op1)
 ;        (set (evals-to (W name2)) op2)
 ;        (union ac (AddCarry (Wire (W name1)) (Wire (W name2)) cin (+ n 1)))))
-
-(rewrite (Or (Or (And a2 b2) (And a2 (AddCarry a b cin n))) (And b1 (AddCarry a b cin n)))
-         (AddCarry (Concat a2 a) (Concat b2 b) cin (+ n 1)))
-(rewrite (Or (And a2 b2) (And (AddCarry a b cin n) (Xor b2 a2))) 
-         (AddCarry (Concat a2 a) (Concat b2 b) cin (+ n 1)))
-(rewrite (Xor (Xor a2 b2) (AddCarry a b cin n)) 
-         (AddSum (Concat a2 a) (Concat b2 b) cin (+ n 1)))
-
-; TODO: make sure it is idempotent, or same name
-; 1. everything gets a unique name
-; 2. deduplicate identical structure within AST
-
-; nbitadd with carry bit
-(rule ((= c (AddCarry a b cin n)) (= sum (AddSum a b cin n)))
-      ((let name (+ rcadder-name (to-str (+ n 1)) "bit_" (to-str (i64-gen))))
-       (set (i64-gen) -1)
-       (set (ripple-carry name) (NBitAdd a b cin))))
-
-       
-       ;(set (dedup-adder "default") (set-of c))))
-
-; nbitadd without carry bit
-(rule ((= sum (AddSum a b cin n)) (set-not-contains (dedup-adder "default") sum))
-      ((let name (+ rcadder-name (to-str (+ n 1)) "bit_" (to-str (i64-gen))))
-       (set (i64-gen) -1)
-       (set (ripple-carry name) (NBitAddNoCarry a b cin))))
-       ; (set (dedup-adder "default") (set-of sum))))
-
-; Add it in tests:
-; (Concat (Concat (AddCarry (Concat (Wire (W "a1")) (Wire (W "a0"))) (Concat (Wire (W "b1")) (Wire (W "cin"))) (Wire (W "b0")) 1) (AddSum (Concat (Wire (W "a1")) (Wire (W "a0"))) (Concat (Wire (W "b1")) (Wire (W "cin"))) (Wire (W "b0")) 1)) (AddSum (Wire (W "b0")) (Wire (W "a0")) (Wire (W "cin")) 0))
-
 ; ----------------------------------------------
+
+; DEPRECATED: rewrite rules for a previous version of MakiWexp that relies on additional CONCAT and SELECT statements in the netlist to trigger.
+; The chicken-and-egg problem is mentioned in the project report
+
 ; half-add
 ; (rewrite (Concat (And a b) (Xor a b)) (HalfAdd a b))
 
