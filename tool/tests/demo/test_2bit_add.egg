@@ -21,7 +21,7 @@
 (extract two-bit-add)
 
 ; PRINT GLOBAL INFORMATION FOR DETECTED ADDERS
-(print ripple-carry 100) ; CAVEAT: lacking feature to print ALL of a function, must manually specify amount of information to print
+; (print ripple-carry 100) ; CAVEAT: lacking feature to print ALL of a function, must manually specify amount of information to print
 ; however, we are only printing out the information, we have access to the entire function if we apply future rewrite rules
 
 ; test equivalence with "desired" output

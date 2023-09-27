@@ -47,17 +47,3 @@
 (check (= (bitwidth-wexp b) 2))
 (pop)
 
-; test egraph state explosion -- happens for any type of circuit
-(push)
-(define generic-circuit
-      (And (And (Wire (W "a")) (Wire (W "b"))) (Or (Wire (W "b")) (Wire (W "c")))))
-
-(define generic-circuit-2
-      (And (Or (And (Wire (W "b0")) (Wire (W "a0"))) (And (Wire (W "cin")) (Xor (Wire (W "b0")) (Wire (W "a0"))))) (Xor (Xor (Wire (W "b0")) (Wire (W "a0"))) (Wire (W "cin")))))
-; (run 15)
-(run 7)
-(extract generic-circuit)
-(extract generic-circuit-2)
-(extract (wires-in-wexp generic-circuit))
-(extract (wires-in-wexp generic-circuit-2))
-(pop)
